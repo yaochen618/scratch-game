@@ -26,7 +26,7 @@ function getGridColumns(cellCount: number) {
     case 9:
       return 3;
     case 15:
-      return 5;
+      return 3;
     case 20:
       return 5;
     case 25:
@@ -40,9 +40,9 @@ function getGridColumns(cellCount: number) {
     case 60:
       return 6;
     case 100:
-      return 8;
+      return 10;
     case 120:
-      return 8;
+      return 10;
     case 200:
       return 10;
     default:
@@ -164,6 +164,32 @@ export default function RoomBoardPage() {
           ← 返回商店頁面
         </button>
         <div className="text-black">找不到刮板</div>
+      </main>
+    );
+  }
+
+  if (room.status !== "active") {
+    return (
+      <main className="min-h-screen bg-blue-200 p-4 sm:p-6">
+        <button
+          type="button"
+          onClick={backToStore}
+          className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-black hover:bg-gray-100"
+        >
+          ← 返回商店頁面
+        </button>
+
+        <div className="mx-auto mt-10 max-w-md rounded-2xl bg-white p-6 text-center shadow">
+          <h1 className="text-2xl font-bold text-black">
+            尚未開放刮卡
+          </h1>
+
+          <p className="mt-3 text-gray-600">
+            此刮板目前為{" "}
+            {room.status === "draft" ? "草稿狀態" : "未開放"}，
+            暫時無法遊玩。
+          </p>
+        </div>
       </main>
     );
   }

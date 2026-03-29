@@ -55,7 +55,7 @@ export async function GET() {
 
     const { data: cells, error: cellError } = await supabase
       .from("session_cells")
-      .select("id, cell_index, is_revealed, revealed_number, draw_order, opened_at")
+      .select("id, cell_index, is_revealed, revealed_number, draw_order, revealed_at")
       .eq("session_id", session.id)
       .order("cell_index", { ascending: true });
 
@@ -73,7 +73,7 @@ export async function GET() {
       is_revealed: cell.is_revealed,
       revealed_number: cell.is_revealed ? cell.revealed_number : null,
       draw_order: cell.is_revealed ? cell.draw_order : null,
-      opened_at: cell.is_revealed ? cell.opened_at : null,
+      revealed_at: cell.is_revealed ? cell.revealed_at : null,
     }));
 
     return NextResponse.json({

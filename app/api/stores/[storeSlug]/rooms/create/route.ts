@@ -58,7 +58,7 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    // 3. 建立 30 格 scratch_cells
+    // 3. 建立 30 格 cells
     const cells = Array.from({ length: 30 }, (_, i) => ({
       room_id: room.id,
       cell_index: i + 1,
@@ -68,7 +68,7 @@ export async function POST(req: Request, context: RouteContext) {
     }));
 
     const { error: cellError } = await supabase
-      .from("scratch_cells")
+      .from("cells")
       .insert(cells);
 
     if (cellError) {

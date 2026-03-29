@@ -42,6 +42,7 @@ export default function EnterPage() {
         return;
       }
 
+      // ✅ 你要的是進入所有商店頁面
       router.push("/stores");
     } catch (error) {
       console.error(error);
@@ -54,7 +55,9 @@ export default function EnterPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lg">
-        <h1 className="mb-2 text-center text-2xl text-black font-bold">歡迎進入客服系統</h1>
+        <h1 className="mb-2 text-center text-2xl font-bold text-black">
+          歡迎進入客服系統
+        </h1>
         <p className="mb-6 text-center text-sm text-gray-500">
           請輸入驗證碼後進入系統
         </p>
@@ -69,7 +72,7 @@ export default function EnterPage() {
             }
           }}
           placeholder="請輸入驗證碼"
-          className="mb-3 w-full rounded-xl border border-gray-300 text-black px-4 py-3 outline-none focus:border-black"
+          className="mb-3 w-full rounded-xl border border-gray-300 px-4 py-3 text-black outline-none focus:border-black"
         />
 
         {errorMsg ? (

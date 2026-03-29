@@ -2,49 +2,66 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const router = useRouter();
+  const supabase = createClient();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    setLoading(true);
 
-    const res = await fetch("/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
 
-    if (res.ok) {
-      router.push("/admin");
-    } else {
-      alert("登入失敗");
+    setLoading(false);
+
+    if (error) {
+      alert("登入失敗：" + error.message);
+      return;
     }
+
+    router.push("/admin");
+    router.refresh();
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <form onSubmit={handleLogin} className="space-y-4 border p-6">
-        <h1 className="text-xl font-bold">管理員登入</h1>
+    <main className="flex min-h-screen items-center justify-center bg-green-300 px-4">
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-sm bg-white space-y-4 rounded-xl border p-6 shadow"
+      >
+        <h1 className="text-xl text-black font-bold">管理員登入</h1>
 
         <input
-          placeholder="帳號"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="border p-2"
+          type="email"
+          placeholder="Email"
+          className="w-full rounded border text-black px-3 py-2"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
 
         <input
           type="password"
-          placeholder="密碼"
+          placeholder="Password"
+          className="w-full rounded border text-black px-3 py-2"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="border p-2"
         />
 
-        <button className="bg-black px-4 py-2 text-white">
-          登入
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded bg-black py-2 text-white"
+        >
+          {loading ? "登入中..." : "登入"}
         </button>
       </form>
     </main>

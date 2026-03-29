@@ -107,11 +107,11 @@ export async function POST(req: NextRequest) {
         is_revealed: true,
         revealed_number: revealedNumber,
         draw_order: nextDrawOrder,
-        opened_at: now,
+        revealed_at: now,
       })
       .eq("id", cell.id)
       .eq("is_revealed", false)
-      .select("id, cell_index, is_revealed, revealed_number, draw_order, opened_at")
+      .select("id, cell_index, is_revealed, revealed_number, draw_order, revealed_at")
       .single();
 
     if (updateError || !updatedCell) {

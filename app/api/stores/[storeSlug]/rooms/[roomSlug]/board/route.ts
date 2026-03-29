@@ -58,15 +58,15 @@ export async function GET(_: Request, context: RouteContext) {
       .limit(1)
       .maybeSingle();
 
-    // 4. 直接讀 scratch_cells（真正的刮板格子）
+    // 4. 直接讀 cells（真正的刮板格子）
     const { data: cells, error: cellsError } = await supabase
-      .from("scratch_cells")
+      .from("cells")
       .select("id, cell_index, is_revealed, revealed_number, revealed_at")
       .eq("room_id", room.id)
       .order("cell_index", { ascending: true });
 
     if (cellsError) {
-      console.error("讀取 scratch_cells 失敗:", cellsError);
+      console.error("讀取 cells 失敗:", cellsError);
       return NextResponse.json({ error: "讀取格子失敗" }, { status: 500 });
     }
 
@@ -86,7 +86,7 @@ export async function GET(_: Request, context: RouteContext) {
       id: cell.id,
       cell_index: cell.cell_index,
       revealed_number: cell.is_revealed ? cell.revealed_number : null,
-      opened_at: cell.revealed_at,
+      revealed_at: cell.revealed_at,
     }));
 
     return NextResponse.json({

@@ -16,69 +16,55 @@ function normalizeSlug(input: string) {
 
 export async function POST(req: Request) {
   try {
-    const { name, slug, merchantId } = await req.json();
+    const body = await req.json();
 
-    if (!name || !slug) {
-      return NextResponse.json({ error: "請完整填寫商店名稱與 slug" }, { status: 400 });
+    const name = String(body.name ?? "").trim();
+    const slug = normalizeSlug(String(body.slug ?? ""));
+
+    if (!name) {
+      return NextResponse.json({ error: "請輸入商店名稱" }, { status: 400 });
     }
 
-    const finalSlug = normalizeSlug(slug);
-
-    if (!finalSlug) {
-      return NextResponse.json({ error: "slug 格式不正確" }, { status: 400 });
+    if (!slug) {
+      return NextResponse.json({ error: "請輸入有效的 slug" }, { status: 400 });
     }
 
-    const { data: existed } = await supabase
+    const { data: existingStore, error: checkError } = await supabase
       .from("stores")
       .select("id")
-      .eq("slug", finalSlug)
+      .eq("slug", slug)
       .maybeSingle();
 
-    if (existed) {
-      return NextResponse.json({ error: "此 slug 已存在" }, { status: 400 });
+    if (checkError) {
+      return NextResponse.json({ error: checkError.message }, { status: 500 });
     }
 
-    if (merchantId) {
-      const { data: merchant, error: merchantError } = await supabase
-        .from("merchant_accounts")
-        .select("id")
-        .eq("id", merchantId)
-        .maybeSingle();
-
-      if (merchantError || !merchant) {
-        return NextResponse.json({ error: "綁定的商家帳號不存在" }, { status: 400 });
-      }
+    if (existingStore) {
+      return NextResponse.json({ error: "這個 slug 已存在" }, { status: 400 });
     }
 
-    const { data: store, error } = await supabase
-      .from("stores")
-      .insert({
-        name: name.trim(),
-        slug: finalSlug,
-        merchant_id: merchantId || null,
-      })
-      .select("id, name, slug, merchant_id")
-      .single();
+    const now = new Date();
+    const expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + 30);
 
-    if (error || !store) {
-      return NextResponse.json(
-        { error: error?.message || "建立商店失敗" },
-        { status: 500 }
-      );
+    const { error: insertError } = await supabase.from("stores").insert({
+      name,
+      slug,
+      is_active: true,
+      plan_type: "basic",
+      billing_status: "active",
+      expires_at: expiresAt.toISOString(),
+    });
+
+    if (insertError) {
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      message: "商店建立成功",
-      store,
+      message: "商店建立成功，已自動開通 30 天",
     });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? `系統錯誤：${error.message}` : "系統錯誤",
-      },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ error: "建立商店失敗" }, { status: 500 });
   }
 }

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { validateMerchantStoreAccess } from "@/lib/merchant-api-auth";
+import { isMerchantPlanAvailable } from "@/lib/merchant-plan";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,26 +15,117 @@ type RouteContext = {
   }>;
 };
 
+async function getMerchantPlanStatusByStoreSlug(storeSlug: string) {
+  const { data: store, error: storeError } = await supabase
+    .from("stores")
+    .select("id, name, slug, is_active, merchant_id")
+    .eq("slug", storeSlug)
+    .single();
+
+  if (storeError || !store) {
+    return {
+      ok: false as const,
+      status: 404,
+      error: "找不到商店",
+      store: null,
+      merchant: null,
+    };
+  }
+
+  if (!store.is_active) {
+    return {
+      ok: false as const,
+      status: 403,
+      error: "此店家目前未開放",
+      store,
+      merchant: null,
+    };
+  }
+
+  if (!store.merchant_id) {
+    return {
+      ok: false as const,
+      status: 403,
+      error: "此店家尚未綁定商家",
+      store,
+      merchant: null,
+    };
+  }
+
+  const { data: merchant, error: merchantError } = await supabase
+    .from("merchant_accounts")
+    .select("id, is_active, billing_status, expires_at")
+    .eq("id", store.merchant_id)
+    .single();
+
+  if (merchantError || !merchant) {
+    return {
+      ok: false as const,
+      status: 500,
+      error: "商家資料異常",
+      store,
+      merchant: null,
+    };
+  }
+
+  const canUse = isMerchantPlanAvailable({
+    is_active: merchant.is_active,
+    billing_status: merchant.billing_status,
+    expires_at: merchant.expires_at,
+  });
+
+  if (!canUse) {
+    return {
+      ok: false as const,
+      status: 403,
+      error: "此店家目前未開放使用",
+      store,
+      merchant,
+    };
+  }
+
+  return {
+    ok: true as const,
+    status: 200,
+    error: null,
+    store,
+    merchant,
+  };
+}
+
 export async function POST(_: Request, context: RouteContext) {
   try {
     const { storeSlug, roomSlug } = await context.params;
 
-    // 1. 找商店
-    const { data: store, error: storeError } = await supabase
-      .from("stores")
-      .select("id")
-      .eq("slug", storeSlug)
-      .single();
-
-    if (storeError || !store) {
-      return NextResponse.json({ error: "找不到商店" }, { status: 404 });
+    if (!storeSlug || !roomSlug) {
+      return NextResponse.json({ error: "缺少必要參數" }, { status: 400 });
     }
 
-    // 2. 找房間
+    // 1. 驗證商家登入 / 是否有權限操作這家店
+    const access = await validateMerchantStoreAccess(storeSlug);
+
+    if (!access.ok) {
+      return NextResponse.json(
+        { error: access.error },
+        { status: access.status }
+      );
+    }
+
+    // 2. 驗證月租 / 啟用狀態
+    const planResult = await getMerchantPlanStatusByStoreSlug(storeSlug);
+
+    if (!planResult.ok) {
+      return NextResponse.json(
+        { error: planResult.error },
+        { status: planResult.status }
+      );
+    }
+
+    // 3. 找房間
     const { data: room, error: roomError } = await supabase
       .from("rooms")
       .select("id, name, slug")
-      .eq("store_id", store.id)
+      .eq("store_id", planResult.store.id)
       .eq("slug", roomSlug)
       .single();
 
@@ -40,9 +133,9 @@ export async function POST(_: Request, context: RouteContext) {
       return NextResponse.json({ error: "找不到房間" }, { status: 404 });
     }
 
-    // 3. 先刪除 scratch_cells
+    // 4. 先刪 cells
     const { error: cellsDeleteError } = await supabase
-      .from("scratch_cells")
+      .from("cells")
       .delete()
       .eq("room_id", room.id);
 
@@ -53,7 +146,7 @@ export async function POST(_: Request, context: RouteContext) {
       );
     }
 
-    // 4. 如有 game_sessions，也一起刪掉
+    // 5. 再刪 game_sessions
     const { error: sessionsDeleteError } = await supabase
       .from("game_sessions")
       .delete()
@@ -66,7 +159,7 @@ export async function POST(_: Request, context: RouteContext) {
       );
     }
 
-    // 5. 最後刪房間
+    // 6. 最後刪 rooms
     const { error: roomDeleteError } = await supabase
       .from("rooms")
       .delete()
@@ -85,6 +178,7 @@ export async function POST(_: Request, context: RouteContext) {
     });
   } catch (error) {
     console.error("delete room error:", error);
+
     return NextResponse.json(
       {
         error: "伺服器錯誤",

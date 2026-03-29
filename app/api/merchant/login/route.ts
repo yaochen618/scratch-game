@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       },
     });
 
-    res.cookies.set("merchant_session", merchant.id, {
+    res.cookies.set("merchant_id", merchant.id, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

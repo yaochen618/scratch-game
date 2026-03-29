@@ -46,7 +46,7 @@ export async function POST() {
         is_revealed: false,
         revealed_number: null,
         draw_order: null,
-        opened_at: null,
+        revealed_at: null,
       })
       .eq("session_id", session.id);
 

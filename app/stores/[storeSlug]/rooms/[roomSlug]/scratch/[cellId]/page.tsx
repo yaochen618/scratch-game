@@ -7,7 +7,7 @@ type CellResult = {
   id: string;
   revealed_number: number;
   draw_order: number;
-  opened_at: string;
+  revealed_at: string;
 };
 
 type ScratchMode = "none" | "left" | "right" | "all";
@@ -42,7 +42,7 @@ export default function ScratchPage() {
 
     try {
       const res = await fetch(
-        `/api/stores/${storeSlug}/rooms/${roomSlug}/reveal`,
+        `/api/stores/${storeSlug}/rooms/${roomSlug}/scratch`,
         {
           method: "POST",
           headers: {
@@ -58,19 +58,27 @@ export default function ScratchPage() {
       try {
         data = JSON.parse(text);
       } catch {
+        console.error("scratch API 非 JSON 回傳：", text);
         setErrorMsg("伺服器回傳格式錯誤");
         return null;
       }
 
       if (!res.ok) {
+        console.error("scratch API 錯誤：", data);
         setErrorMsg(data.error || "失敗");
+        return null;
+      }
+
+      if (!data?.cell) {
+        setErrorMsg("回傳資料不完整");
         return null;
       }
 
       setResult(data.cell);
       setLocked(true);
       return data.cell as CellResult;
-    } catch {
+    } catch (error) {
+      console.error("scratch page reveal error:", error);
       setErrorMsg("系統錯誤");
       return null;
     } finally {
@@ -129,27 +137,25 @@ export default function ScratchPage() {
         {!locked && (
           <button
             onClick={() => router.push(`/stores/${storeSlug}/rooms/${roomSlug}`)}
-            className="mb-4 rounded-xl bg-gray-500 px-4 py-2 shadow"
+            className="mb-4 rounded-xl bg-gray-500 px-4 py-2 text-white shadow"
           >
             ← 返回刮板
           </button>
         )}
 
         <div className="rounded-3xl bg-white p-5 text-center shadow-lg">
-          <h1 className="mb-4 text-xl text-black font-bold">
+          <h1 className="mb-4 text-xl font-bold text-black">
             {showMeta ? "結果" : "選擇刮開方式"}
           </h1>
 
           <div className="mb-6 flex justify-center">
             <div className="relative h-44 w-44 overflow-hidden rounded-full border bg-gray-100 shadow-inner">
-              {/* 數字底層：一旦 result 出來就存在，但只露出被刮開的部分 */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="text-5xl font-bold tracking-wide text-black">
                   {formattedNumber}
                 </span>
               </div>
 
-              {/* 左遮罩 */}
               <div
                 className={`absolute left-0 top-0 h-full bg-gray-400 transition-all duration-700 ease-in-out ${
                   scratchMode === "none"
@@ -162,7 +168,6 @@ export default function ScratchPage() {
                 }`}
               />
 
-              {/* 右遮罩 */}
               <div
                 className={`absolute right-0 top-0 h-full bg-gray-400 transition-all duration-700 ease-in-out ${
                   scratchMode === "none"
@@ -175,7 +180,6 @@ export default function ScratchPage() {
                 }`}
               />
 
-              {/* 中央提示字：只有完全沒刮時顯示 */}
               {scratchMode === "none" && !result && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <span className="text-base font-semibold text-white/90">
@@ -216,9 +220,7 @@ export default function ScratchPage() {
 
           {result && !showMeta && showFinishButton && (
             <div className="space-y-3">
-              <p className="text-sm text-black">
-                刮開全部查看完整數字
-              </p>
+              <p className="text-sm text-black">刮開全部查看完整數字</p>
 
               <button
                 onClick={handleFinishScratch}
@@ -237,15 +239,14 @@ export default function ScratchPage() {
 
                 <p className="mt-3 text-sm text-gray-600">板號</p>
                 <p className="text-base font-semibold text-black">{roomSlug}</p>
-
               </div>
 
-              <p className="text-lg text-black font-semibold">
+              <p className="text-lg font-semibold text-black">
                 第 {result.draw_order} 抽
               </p>
 
               <p className="mt-2 text-sm text-gray-400">
-                開啟時間：{new Date(result.opened_at).toLocaleString()}
+                開啟時間：{new Date(result.revealed_at).toLocaleString()}
               </p>
 
               <button
@@ -257,9 +258,7 @@ export default function ScratchPage() {
             </>
           )}
 
-          {errorMsg && (
-            <p className="mt-4 text-sm text-red-500">{errorMsg}</p>
-          )}
+          {errorMsg && <p className="mt-4 text-sm text-red-500">{errorMsg}</p>}
         </div>
       </div>
     </main>
