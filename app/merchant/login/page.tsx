@@ -27,14 +27,28 @@ export default function MerchantLoginPage() {
         }),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      console.log("login status =", res.status);
+      console.log("login rawText =", rawText);
+
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch (err) {
+        console.error("JSON parse error:", err);
+        alert("登入 API 回傳的不是 JSON，請看 console");
+        return;
+      }
+
+      console.log("login data =", data);
 
       if (!res.ok) {
-        alert(data.error || "登入失敗");
+        alert(data?.error || `登入失敗 (${res.status})`);
         return;
       }
 
       const storeSlug = data?.merchant?.storeSlug;
+      console.log("storeSlug =", storeSlug);
 
       if (!storeSlug) {
         alert("登入成功，但找不到店家資訊");
@@ -44,8 +58,8 @@ export default function MerchantLoginPage() {
       router.push(`/merchant/${storeSlug}/rooms`);
       router.refresh();
     } catch (error) {
-      console.error(error);
-      alert("發生錯誤");
+      console.error("login error =", error);
+      alert("發生錯誤，請看 console");
     } finally {
       setLoading(false);
     }

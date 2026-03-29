@@ -5,15 +5,14 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // 商家頁保護
-  const merchantSession = request.cookies.get("merchant_session");
+  const merchantId = request.cookies.get("merchant_id")?.value;
   const isMerchantPage = pathname.startsWith("/merchant");
   const isMerchantLoginPage = pathname.startsWith("/merchant/login");
 
-  if (isMerchantPage && !isMerchantLoginPage && !merchantSession) {
+  if (isMerchantPage && !isMerchantLoginPage && !merchantId) {
     return NextResponse.redirect(new URL("/merchant/login", request.url));
   }
 
-  // 先建立 response
   let response = NextResponse.next({
     request,
   });
