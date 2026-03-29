@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 
+export const dynamic = "force-dynamic";
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -57,16 +59,55 @@ export async function POST(req: Request) {
       );
     }
 
+    // 依商家帳號找對應店家
+    const { data: store, error: storeError } = await supabase
+      .from("stores")
+      .select("id, slug, name, is_active, expires_at")
+      .eq("merchant_id", merchant.id)
+      .maybeSingle();
+
+    if (storeError) {
+      console.error("store query error:", storeError);
+      return NextResponse.json(
+        { error: `讀取店家資料失敗：${storeError.message}` },
+        { status: 500 }
+      );
+    }
+
+    if (!store) {
+      return NextResponse.json(
+        { error: "此商家帳號尚未綁定店家" },
+        { status: 404 }
+      );
+    }
+
+    if (store.is_active === false) {
+      return NextResponse.json(
+        { error: "此店家目前已停用" },
+        { status: 403 }
+      );
+    }
+
     const res = NextResponse.json({
       success: true,
       merchant: {
         id: merchant.id,
         username: merchant.username,
         display_name: merchant.display_name,
+        storeSlug: store.slug,
+        storeName: store.name,
       },
     });
 
     res.cookies.set("merchant_id", merchant.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    res.cookies.set("merchant_store_slug", store.slug, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

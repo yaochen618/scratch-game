@@ -20,6 +20,7 @@ export default function MerchantLoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        cache: "no-store",
         body: JSON.stringify({
           username,
           password,
@@ -33,7 +34,14 @@ export default function MerchantLoginPage() {
         return;
       }
 
-      router.push("/merchant");
+      const storeSlug = data?.merchant?.storeSlug;
+
+      if (!storeSlug) {
+        alert("登入成功，但找不到店家資訊");
+        return;
+      }
+
+      router.push(`/merchant/${storeSlug}/rooms`);
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -46,25 +54,29 @@ export default function MerchantLoginPage() {
   return (
     <main className="min-h-screen bg-blue-200 px-4 py-10">
       <div className="mx-auto max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="mb-6 text-2xl text-black font-bold">商家登入</h1>
+        <h1 className="mb-6 text-2xl font-bold text-black">商家登入</h1>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-black font-medium">帳號</label>
+            <label className="mb-1 block text-sm font-medium text-black">
+              帳號
+            </label>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-lg text-black border px-3 py-2"
+              className="w-full rounded-lg border px-3 py-2 text-black"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm text-black font-medium">密碼</label>
+            <label className="mb-1 block text-sm font-medium text-black">
+              密碼
+            </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg text-black border px-3 py-2"
+              className="w-full rounded-lg border px-3 py-2 text-black"
             />
           </div>
 
