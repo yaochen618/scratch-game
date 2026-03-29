@@ -7,18 +7,14 @@ const supabase = createClient(
 );
 
 type RouteContext = {
-  params:
-    | Promise<{
-        storeId: string;
-      }>
-    | {
-        storeId: string;
-      };
+  params: Promise<{
+    storeSlug: string;
+  }>;
 };
 
 async function getStoreId(context: RouteContext) {
   const resolvedParams = await Promise.resolve(context.params);
-  return resolvedParams?.storeId;
+  return resolvedParams?.storeSlug;
 }
 
 export async function POST(_: Request, context: RouteContext) {
