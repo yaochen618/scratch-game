@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import LogoutButton from "@/components/logout-button"; // ✅ 新增
 import {
   getRemainingDays,
   isMerchantExpired,
@@ -57,7 +58,13 @@ export default async function MerchantPage() {
   return (
     <main className="min-h-screen bg-blue-200 p-6">
       <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl text-black font-bold">商家後台</h1>
+
+        {/* ✅ 標題 + 登出 */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl text-black font-bold">商家後台</h1>
+          <LogoutButton />
+        </div>
+
         <p className="mt-2 text-gray-900">歡迎，{merchant.display_name}</p>
 
         {showWarning && (
@@ -84,13 +91,6 @@ export default async function MerchantPage() {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Link
-                      href={`/merchant/${store.slug}`}
-                      className="rounded-lg bg-black px-4 py-2 text-sm text-white"
-                    >
-                      進入管理
-                    </Link>
-
                     <Link
                       href={`/merchant/${store.slug}/rooms`}
                       className="rounded-lg border bg-white text-black px-4 py-2 text-sm"

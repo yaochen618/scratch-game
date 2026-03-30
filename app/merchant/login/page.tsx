@@ -55,7 +55,7 @@ export default function MerchantLoginPage() {
         return;
       }
 
-      router.push(`/merchant/${storeSlug}/rooms`);
+      router.push(`/merchant`);
       router.refresh();
     } catch (error) {
       console.error("login error =", error);

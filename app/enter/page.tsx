@@ -56,9 +56,10 @@ export default function EnterPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lg">
         <h1 className="mb-2 text-center text-2xl font-bold text-black">
-          歡迎進入客服系統
+          歡迎進入商品購買系統
         </h1>
         <p className="mb-6 text-center text-sm text-gray-500">
+          聯絡Line:jaylen1114 <br />
           請輸入驗證碼後進入系統
         </p>
 

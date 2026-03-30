@@ -8,5 +8,10 @@ export async function POST() {
     maxAge: 0,
   });
 
+  res.cookies.set("merchant_session", "", {
+    path: "/",
+    maxAge: 0,
+  });
+
   return res;
 }
