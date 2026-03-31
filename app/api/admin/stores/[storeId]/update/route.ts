@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
@@ -15,10 +15,13 @@ function normalizeSlug(input: string) {
     .replace(/[^a-z0-9-_]/g, "");
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: { storeId: string } }
-) {
+type RouteContext = {
+  params: Promise<{
+    storeId: string;
+  }>;
+};
+
+export async function PATCH(req: NextRequest, context: RouteContext) {
   try {
     const cookieStore = await cookies();
     const adminSession = cookieStore.get("admin_session")?.value;
@@ -27,7 +30,7 @@ export async function PATCH(
       return NextResponse.json({ error: "未登入管理員" }, { status: 401 });
     }
 
-    const { storeId } = params;
+    const { storeId } = await context.params;
     const body = await req.json();
 
     const rawName = String(body?.name ?? "").trim();
