@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { getRemainingDays, isMerchantExpired } from "@/lib/merchant-plan";
 import DeleteStoreButton from "./delete-store-button";
 import CreateStoreForm from "./create-store-form";
+import EditStoreForm from "./edit-store-form";
 
 type StoreRow = {
   id: string;
@@ -116,6 +117,12 @@ export default async function AdminStoresPage() {
                         ⚠ 此商店租約已過期
                       </div>
                     )}
+
+                    <EditStoreForm
+                      storeId={String(store.id)}
+                      initialName={store.name}
+                      initialSlug={store.slug}
+                    />
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link

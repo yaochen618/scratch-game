@@ -74,9 +74,16 @@ export default function ScratchPage() {
         return null;
       }
 
-      setResult(data.cell);
+      const newResult: CellResult = {
+        id: data.cell.id,
+        revealed_number: Number(data.cell.revealed_number),
+        draw_order: Number(data.cell.draw_order),
+        revealed_at: data.cell.revealed_at,
+      };
+
+      setResult(newResult);
       setLocked(true);
-      return data.cell as CellResult;
+      return newResult;
     } catch (error) {
       console.error("scratch page reveal error:", error);
       setErrorMsg("系統錯誤");
@@ -236,9 +243,6 @@ export default function ScratchPage() {
               <div className="mb-4 rounded-2xl bg-gray-200 px-4 py-3 text-left">
                 <p className="text-sm text-gray-600">店家</p>
                 <p className="text-base font-semibold text-black">{storeSlug}</p>
-
-                <p className="mt-3 text-sm text-gray-600">板號</p>
-                <p className="text-base font-semibold text-black">{roomSlug}</p>
               </div>
 
               <p className="text-lg font-semibold text-black">
