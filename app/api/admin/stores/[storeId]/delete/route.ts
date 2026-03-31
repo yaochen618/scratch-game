@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -7,23 +7,14 @@ const supabase = createClient(
 );
 
 type RouteContext = {
-  params:
-    | Promise<{
-        storeId: string;
-      }>
-    | {
-        storeId: string;
-      };
+  params: Promise<{
+    storeId: string;
+  }>;
 };
 
-async function getStoreId(context: RouteContext) {
-  const resolvedParams = await Promise.resolve(context.params);
-  return resolvedParams?.storeId;
-}
-
-export async function DELETE(_: Request, context: RouteContext) {
+export async function DELETE(_req: NextRequest, context: RouteContext) {
   try {
-    const storeId = await getStoreId(context);
+    const { storeId } = await context.params;
 
     if (!storeId) {
       return NextResponse.json({ error: "缺少 storeId" }, { status: 400 });
@@ -99,7 +90,8 @@ export async function DELETE(_: Request, context: RouteContext) {
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("delete store error:", error);
     return NextResponse.json({ error: "刪除商店失敗" }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import {
   validateForceRules,
 } from "@/lib/force-rules";
 
-function isSystemAdmin(request: Request) {
+function isSystemAdmin(request: NextRequest) {
   const adminKey = request.headers.get("x-system-admin-key");
   return adminKey === process.env.SYSTEM_ADMIN_KEY;
 }
@@ -17,15 +17,10 @@ const supabase = createClient(
 );
 
 type RouteContext = {
-  params:
-    | Promise<{
-        storeSlug: string;
-        roomSlug: string;
-      }>
-    | {
-        storeSlug: string;
-        roomSlug: string;
-      };
+  params: Promise<{
+    storeSlug: string;
+    roomSlug: string;
+  }>;
 };
 
 type SpecialModeRule = {
@@ -39,10 +34,6 @@ type SpecialMode = {
   initial_pool?: number[];
   add_rules?: SpecialModeRule[];
 };
-
-async function getParams(context: RouteContext) {
-  return await Promise.resolve(context.params);
-}
 
 function normalizeSpecialMode(input: unknown): SpecialMode | null {
   if (!input || typeof input !== "object") return null;
@@ -210,7 +201,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "無權限使用此功能" }, { status: 403 });
     }
 
-    const { storeSlug, roomSlug } = await getParams(context);
+    const { storeSlug, roomSlug } = await context.params;
 
     const { data: store, error: storeError } = await supabase
       .from("stores")
@@ -285,7 +276,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "無權限使用此功能" }, { status: 403 });
     }
 
-    const { storeSlug, roomSlug } = await getParams(context);
+    const { storeSlug, roomSlug } = await context.params;
     const body = await req.json();
 
     const incomingRules = cleanupForceRules(

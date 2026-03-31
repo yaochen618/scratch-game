@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -12,23 +12,18 @@ type RouteContext = {
   }>;
 };
 
-async function getStoreId(context: RouteContext) {
-  const resolvedParams = await Promise.resolve(context.params);
-  return resolvedParams?.storeSlug;
-}
-
-export async function POST(_: Request, context: RouteContext) {
+export async function POST(_req: NextRequest, context: RouteContext) {
   try {
-    const storeId = await getStoreId(context);
+    const { storeSlug } = await context.params;
 
-    if (!storeId) {
-      return NextResponse.json({ error: "缺少 storeId" }, { status: 400 });
+    if (!storeSlug) {
+      return NextResponse.json({ error: "缺少 storeSlug" }, { status: 400 });
     }
 
     const { data: store, error: findError } = await supabase
       .from("stores")
       .select("id, expires_at")
-      .eq("id", storeId)
+      .eq("slug", storeSlug)
       .single();
 
     if (findError || !store) {
@@ -49,7 +44,7 @@ export async function POST(_: Request, context: RouteContext) {
         expires_at: currentExpire.toISOString(),
         is_active: true,
       })
-      .eq("id", storeId);
+      .eq("id", store.id);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -60,6 +55,7 @@ export async function POST(_: Request, context: RouteContext) {
       expires_at: currentExpire.toISOString(),
     });
   } catch (error) {
+    console.error("renew store error:", error);
     return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
   }
 }
