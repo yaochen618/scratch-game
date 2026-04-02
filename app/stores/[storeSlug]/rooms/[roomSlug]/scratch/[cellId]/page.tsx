@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type CellResult = {
   id: string;
   revealed_number: number;
   draw_order: number;
-  revealed_at: string;
+  revealed_at: string | null;
+  is_revealed?: boolean;
 };
 
 type ScratchMode = "none" | "left" | "right" | "all";
@@ -21,23 +22,98 @@ export default function ScratchPage() {
   const cellId = params.cellId as string;
 
   const [result, setResult] = useState<CellResult | null>(null);
-  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [locked, setLocked] = useState(false);
   const [scratchMode, setScratchMode] = useState<ScratchMode>("none");
   const [showFinishButton, setShowFinishButton] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
+
+  const [ready, setReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const hasTriggeredRevealRef = useRef(false);
 
   const formattedNumber = useMemo(() => {
     if (!result) return "00";
     return String(result.revealed_number).padStart(2, "0");
   }, [result]);
 
-  const reveal = async () => {
-    if (result) return result;
+  useEffect(() => {
+    let cancelled = false;
 
-    setLoading(true);
+    const fetchPreview = async () => {
+      try {
+        const res = await fetch(
+          `/api/stores/${storeSlug}/rooms/${roomSlug}/scratch/preview`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ cellId }),
+          }
+        );
+
+        const text = await res.text();
+
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.error("preview API 非 JSON 回傳：", text);
+          if (!cancelled) setErrorMsg("伺服器回傳格式錯誤");
+          return;
+        }
+
+        if (!res.ok) {
+          console.error("preview API 錯誤：", data);
+          if (!cancelled) setErrorMsg(data.error || "失敗");
+          return;
+        }
+
+        if (!data?.cell) {
+          if (!cancelled) setErrorMsg("回傳資料不完整");
+          return;
+        }
+
+        const previewResult: CellResult = {
+          id: data.cell.id,
+          revealed_number: Number(data.cell.revealed_number),
+          draw_order: Number(data.cell.draw_order),
+          revealed_at: data.cell.revealed_at ?? null,
+          is_revealed: Boolean(data.cell.is_revealed),
+        };
+
+        if (cancelled) return;
+
+        // 畫面直接固定用 preview 的值
+        setResult(previewResult);
+        setReady(true);
+
+        if (previewResult.is_revealed) {
+          setScratchMode("all");
+          setShowFinishButton(false);
+          setShowMeta(true);
+          hasTriggeredRevealRef.current = true;
+        }
+      } catch (error) {
+        console.error("scratch page preview error:", error);
+        if (!cancelled) setErrorMsg("系統錯誤");
+      }
+    };
+
+    fetchPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storeSlug, roomSlug, cellId]);
+
+  const revealFinal = async () => {
+    if (hasTriggeredRevealRef.current) return true;
+
+    hasTriggeredRevealRef.current = true;
+    setSubmitting(true);
     setErrorMsg("");
 
     try {
@@ -60,73 +136,76 @@ export default function ScratchPage() {
       } catch {
         console.error("scratch API 非 JSON 回傳：", text);
         setErrorMsg("伺服器回傳格式錯誤");
-        return null;
+        hasTriggeredRevealRef.current = false;
+        return false;
       }
 
       if (!res.ok) {
         console.error("scratch API 錯誤：", data);
         setErrorMsg(data.error || "失敗");
-        return null;
+        hasTriggeredRevealRef.current = false;
+        return false;
       }
 
       if (!data?.cell) {
         setErrorMsg("回傳資料不完整");
-        return null;
+        hasTriggeredRevealRef.current = false;
+        return false;
       }
 
-      const newResult: CellResult = {
-        id: data.cell.id,
-        revealed_number: Number(data.cell.revealed_number),
-        draw_order: Number(data.cell.draw_order),
-        revealed_at: data.cell.revealed_at,
-      };
-
-      setResult(newResult);
-      setLocked(true);
-      return newResult;
+      // 注意：這裡不要 setResult，避免數字跳動
+      return true;
     } catch (error) {
       console.error("scratch page reveal error:", error);
       setErrorMsg("系統錯誤");
-      return null;
+      hasTriggeredRevealRef.current = false;
+      return false;
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleScratchLeft = async () => {
-    const revealed = await reveal();
-    if (!revealed) return;
+    if (!ready || submitting || !result) return;
 
     setShowMeta(false);
     setScratchMode("left");
+    setShowFinishButton(true);
 
-    window.setTimeout(() => {
-      setShowFinishButton(true);
-    }, 0);
+    const ok = await revealFinal();
+    if (!ok) {
+      setScratchMode("none");
+      setShowFinishButton(false);
+    }
   };
 
   const handleScratchRight = async () => {
-    const revealed = await reveal();
-    if (!revealed) return;
+    if (!ready || submitting || !result) return;
 
     setShowMeta(false);
     setScratchMode("right");
+    setShowFinishButton(true);
 
-    window.setTimeout(() => {
-      setShowFinishButton(true);
-    }, 0);
+    const ok = await revealFinal();
+    if (!ok) {
+      setScratchMode("none");
+      setShowFinishButton(false);
+    }
   };
 
   const handleScratchAllDirect = async () => {
-    const revealed = await reveal();
-    if (!revealed) return;
+    if (!ready || submitting || !result) return;
 
     setShowFinishButton(false);
     setScratchMode("all");
 
-    window.setTimeout(() => {
-      setShowMeta(true);
-    }, 0);
+    const ok = await revealFinal();
+    if (!ok) {
+      setScratchMode("none");
+      return;
+    }
+
+    setShowMeta(true);
   };
 
   const handleFinishScratch = () => {
@@ -141,15 +220,6 @@ export default function ScratchPage() {
   return (
     <main className="min-h-screen bg-blue-100 px-4 py-6">
       <div className="mx-auto max-w-md">
-        {!locked && (
-          <button
-            onClick={() => router.push(`/stores/${storeSlug}/rooms/${roomSlug}`)}
-            className="mb-4 rounded-xl bg-gray-500 px-4 py-2 text-white shadow"
-          >
-            ← 返回刮板
-          </button>
-        )}
-
         <div className="rounded-3xl bg-white p-5 text-center shadow-lg">
           <h1 className="mb-4 text-xl font-bold text-black">
             {showMeta ? "結果" : "選擇刮開方式"}
@@ -187,7 +257,7 @@ export default function ScratchPage() {
                 }`}
               />
 
-              {scratchMode === "none" && !result && (
+              {scratchMode === "none" && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <span className="text-base font-semibold text-white/90">
                     刮開
@@ -197,44 +267,43 @@ export default function ScratchPage() {
             </div>
           </div>
 
-          {!result && (
+          {!showMeta && (
             <div className="space-y-3">
-              <button
-                onClick={handleScratchLeft}
-                disabled={loading}
-                className="w-full rounded-xl bg-black py-3 font-semibold text-white disabled:opacity-50"
-              >
-                {loading ? "處理中..." : "刮左半"}
-              </button>
+              {!showFinishButton ? (
+                <>
+                  <button
+                    onClick={handleScratchLeft}
+                    className="w-full rounded-xl bg-black py-3 font-semibold text-white"
+                  >
+                    刮左半
+                  </button>
 
-              <button
-                onClick={handleScratchRight}
-                disabled={loading}
-                className="w-full rounded-xl bg-black py-3 font-semibold text-white disabled:opacity-50"
-              >
-                {loading ? "處理中..." : "刮右半"}
-              </button>
+                  <button
+                    onClick={handleScratchRight}
+                    className="w-full rounded-xl bg-black py-3 font-semibold text-white"
+                  >
+                    刮右半
+                  </button>
 
-              <button
-                onClick={handleScratchAllDirect}
-                disabled={loading}
-                className="w-full rounded-xl bg-green-600 py-3 font-semibold text-white disabled:opacity-50"
-              >
-                {loading ? "處理中..." : "直接刮開"}
-              </button>
-            </div>
-          )}
+                  <button
+                    onClick={handleScratchAllDirect}
+                    className="w-full rounded-xl bg-green-600 py-3 font-semibold text-white"
+                  >
+                    直接刮開
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-black">刮開全部查看完整數字</p>
 
-          {result && !showMeta && showFinishButton && (
-            <div className="space-y-3">
-              <p className="text-sm text-black">刮開全部查看完整數字</p>
-
-              <button
-                onClick={handleFinishScratch}
-                className="w-full rounded-xl bg-black py-3 font-semibold text-white"
-              >
-                刮開全部
-              </button>
+                  <button
+                    onClick={handleFinishScratch}
+                    className="w-full rounded-xl bg-black py-3 font-semibold text-white"
+                  >
+                    刮開全部
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -247,10 +316,6 @@ export default function ScratchPage() {
 
               <p className="text-lg font-semibold text-black">
                 第 {result.draw_order} 抽
-              </p>
-
-              <p className="mt-2 text-sm text-gray-400">
-                開啟時間：{new Date(result.revealed_at).toLocaleString()}
               </p>
 
               <button
