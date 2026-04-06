@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
@@ -85,52 +85,59 @@ export default function RoomBoardPage() {
   const [drawing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const fetchRoomData = useCallback(async (showLoading = true) => {
-    try {
-      if (showLoading) setLoading(true);
-      setErrorMsg("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<Cell | null>(null);
+  const [navigating, setNavigating] = useState(false);
 
-      const res = await fetch(`/api/stores/${storeSlug}/rooms/${roomSlug}`, {
-        cache: "no-store",
-      });
-
-      const text = await res.text();
-      console.log("room detail status =", res.status);
-      console.log("room detail raw =", text);
-
-      let data: RoomApiResponse | null = null;
-
+  const fetchRoomData = useCallback(
+    async (showLoading = true) => {
       try {
-        data = JSON.parse(text);
-      } catch {
-        setErrorMsg(`伺服器回傳格式錯誤（HTTP ${res.status}）`);
-        return;
+        if (showLoading) setLoading(true);
+        setErrorMsg("");
+
+        const res = await fetch(`/api/stores/${storeSlug}/rooms/${roomSlug}`, {
+          cache: "no-store",
+        });
+
+        const text = await res.text();
+        console.log("room detail status =", res.status);
+        console.log("room detail raw =", text);
+
+        let data: RoomApiResponse | null = null;
+
+        try {
+          data = JSON.parse(text);
+        } catch {
+          setErrorMsg(`伺服器回傳格式錯誤（HTTP ${res.status}）`);
+          return;
+        }
+
+        if (!res.ok) {
+          setErrorMsg((data as any)?.error || "讀取失敗");
+          return;
+        }
+
+        const nextRoom = data?.room || null;
+        const nextCells = data?.cells || [];
+        const nextSessionId =
+          data?.sessionId ||
+          nextCells.find((cell) => cell.session_id)?.session_id ||
+          null;
+
+        console.log("nextSessionId =", nextSessionId);
+
+        setRoom(nextRoom);
+        setCells(nextCells);
+        setSessionId(nextSessionId);
+      } catch (error) {
+        console.error("fetchRoomData error =", error);
+        setErrorMsg("系統錯誤");
+      } finally {
+        if (showLoading) setLoading(false);
       }
-
-      if (!res.ok) {
-        setErrorMsg((data as any)?.error || "讀取失敗");
-        return;
-      }
-
-      const nextRoom = data?.room || null;
-      const nextCells = data?.cells || [];
-      const nextSessionId =
-        data?.sessionId ||
-        nextCells.find((cell) => cell.session_id)?.session_id ||
-        null;
-
-      console.log("nextSessionId =", nextSessionId);
-
-      setRoom(nextRoom);
-      setCells(nextCells);
-      setSessionId(nextSessionId);
-    } catch (error) {
-      console.error("fetchRoomData error =", error);
-      setErrorMsg("系統錯誤");
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, [storeSlug, roomSlug]);
+    },
+    [storeSlug, roomSlug]
+  );
 
   useEffect(() => {
     if (storeSlug && roomSlug) {
@@ -138,7 +145,6 @@ export default function RoomBoardPage() {
     }
   }, [storeSlug, roomSlug, fetchRoomData]);
 
-  // Realtime
   useEffect(() => {
     if (!sessionId) {
       console.log("沒有 sessionId，Realtime 不會啟動");
@@ -171,7 +177,6 @@ export default function RoomBoardPage() {
     };
   }, [sessionId, fetchRoomData]);
 
-  // 備援：每 2 秒自動更新一次
   useEffect(() => {
     if (!storeSlug || !roomSlug) return;
 
@@ -182,6 +187,20 @@ export default function RoomBoardPage() {
     return () => clearInterval(timer);
   }, [storeSlug, roomSlug, fetchRoomData]);
 
+  useEffect(() => {
+    if (!confirmOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !navigating) {
+        setConfirmOpen(false);
+        setSelectedCell(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmOpen, navigating]);
+
   const revealedCount = cells.filter((cell) => cell.is_revealed).length;
   const totalCount = room?.cell_count ?? cells.length;
   const gridCols = getGridColumns(totalCount);
@@ -189,6 +208,27 @@ export default function RoomBoardPage() {
 
   const backToStore = () => {
     router.push(`/stores/${storeSlug}`);
+  };
+
+  const handleSelectCell = (cell: Cell) => {
+    if (cell.is_revealed || drawing || navigating) return;
+    setSelectedCell(cell);
+    setConfirmOpen(true);
+  };
+
+  const handleCloseConfirm = () => {
+    if (navigating) return;
+    setConfirmOpen(false);
+    setSelectedCell(null);
+  };
+
+  const handleConfirmSelect = () => {
+    if (!selectedCell || navigating) return;
+
+    setNavigating(true);
+    router.push(
+      `/stores/${storeSlug}/rooms/${roomSlug}/scratch/${selectedCell.id}`
+    );
   };
 
   if (loading) {
@@ -260,59 +300,104 @@ export default function RoomBoardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-blue-200 p-4 sm:p-6">
-      <button
-        type="button"
-        onClick={backToStore}
-        className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-black hover:bg-gray-100"
-      >
-        ← 返回商店頁面
-      </button>
-
-      <h1 className="text-2xl font-bold text-black">{room.name}</h1>
-
-      <p className="mt-2 text-gray-600">
-        已刮開：{revealedCount}/{totalCount}
-      </p>
-
-      {drawing && <p className="mt-2 text-sm text-gray-500">刮開中...</p>}
-
-      <div className="mt-6 overflow-x-auto">
-        <div
-          className="grid min-w-max justify-center gap-2"
-          style={{
-            gridTemplateColumns: `repeat(${gridCols}, ${cellSize}px)`,
-          }}
+    <>
+      <main className="min-h-screen bg-blue-200 p-4 sm:p-6">
+        <button
+          type="button"
+          onClick={backToStore}
+          className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-black hover:bg-gray-100"
         >
-          {cells.map((cell) => (
-            <button
-              key={cell.id}
-              type="button"
-              disabled={cell.is_revealed || drawing}
-              onClick={() =>
-                router.push(
-                  `/stores/${storeSlug}/rooms/${roomSlug}/scratch/${cell.id}`
-                )
-              }
-              className={`flex shrink-0 items-center justify-center rounded-xl border font-bold transition ${
-                cell.is_revealed
-                  ? "cursor-not-allowed border-yellow-300 bg-white text-black"
-                  : "cursor-pointer border-black-300 bg-gray-200 text-gray-700 hover:bg-gray-300 active:scale-95"
-              }`}
-              style={{
-                width: `${cellSize}px`,
-                height: `${cellSize}px`,
-                fontSize:
-                  cellSize >= 64 ? "18px" : cellSize >= 42 ? "16px" : "13px",
-              }}
-            >
-              {cell.is_revealed
-                ? String(cell.revealed_number ?? "").padStart(2, "0")
-                : "?"}
-            </button>
-          ))}
+          ← 返回商店頁面
+        </button>
+
+        <h1 className="text-2xl font-bold text-black">{room.name}</h1>
+
+        <p className="mt-2 text-gray-600">
+          已刮開：{revealedCount}/{totalCount}
+        </p>
+
+        {drawing && <p className="mt-2 text-sm text-gray-500">刮開中...</p>}
+
+        <div className="mt-6 overflow-x-auto">
+          <div
+            className="grid min-w-max justify-center gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${gridCols}, ${cellSize}px)`,
+            }}
+          >
+            {cells.map((cell) => (
+              <button
+                key={cell.id}
+                type="button"
+                disabled={cell.is_revealed || drawing || navigating}
+                onClick={() => handleSelectCell(cell)}
+                className={`flex shrink-0 items-center justify-center rounded-xl border font-bold transition ${
+                  cell.is_revealed
+                    ? "cursor-not-allowed border-yellow-300 bg-white text-black"
+                    : "cursor-pointer border-gray-400 bg-gray-200 text-gray-700 hover:bg-gray-300 active:scale-95"
+                }`}
+                style={{
+                  width: `${cellSize}px`,
+                  height: `${cellSize}px`,
+                  fontSize:
+                    cellSize >= 64 ? "18px" : cellSize >= 42 ? "16px" : "13px",
+                }}
+              >
+                {cell.is_revealed
+                  ? String(cell.revealed_number ?? "").padStart(2, "0")
+                  : "?"}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-100 text-2xl">
+              ⚠️
+            </div>
+
+            <h2 className="text-center text-xl font-bold text-black">
+              確認選擇這一格？
+            </h2>
+
+            <p className="mt-3 text-center text-sm leading-6 text-gray-600">
+              選取後將無法返回上一頁
+            </p>
+
+            {selectedCell && (
+              <div className="mt-4 rounded-2xl bg-gray-100 px-4 py-3 text-center">
+                <p className="text-sm text-gray-500">目前選擇</p>
+                <p className="text-lg font-bold text-black">
+                  第 {selectedCell.cell_index} 格
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={handleCloseConfirm}
+                disabled={navigating}
+                className="rounded-2xl border border-gray-300 bg-white px-4 py-3 font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                取消
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmSelect}
+                disabled={navigating}
+                className="rounded-2xl bg-black px-4 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {navigating ? "進入中..." : "確認"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
