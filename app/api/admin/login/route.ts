@@ -18,13 +18,13 @@ export async function POST(req: Request) {
     .single();
 
   if (!admin) {
-    return NextResponse.json({ error: "帳號不存在" }, { status: 400 });
+    return NextResponse.json({ error: "帳號或密碼錯誤" }, { status: 400 });
   }
 
   const valid = await bcrypt.compare(password, admin.password_hash);
 
   if (!valid) {
-    return NextResponse.json({ error: "密碼錯誤" }, { status: 400 });
+    return NextResponse.json({ error: "帳號或密碼錯誤" }, { status: 400 });
   }
 
   const cookieStore = await cookies();
@@ -32,6 +32,8 @@ export async function POST(req: Request) {
   cookieStore.set("admin_session", admin.id, {
     httpOnly: true,
     path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
   });
 
   return NextResponse.json({ success: true });

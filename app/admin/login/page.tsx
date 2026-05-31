@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const supabase = createClient();
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,15 +14,22 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username,
+        password,
+      }),
     });
 
+    const data = await res.json();
     setLoading(false);
 
-    if (error) {
-      alert("登入失敗：" + error.message);
+    if (!res.ok) {
+      alert("登入失敗：" + data.error);
       return;
     }
 
@@ -36,22 +41,22 @@ export default function AdminLoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-green-300 px-4">
       <form
         onSubmit={handleLogin}
-        className="w-full max-w-sm bg-white space-y-4 rounded-xl border p-6 shadow"
+        className="w-full max-w-sm space-y-4 rounded-xl border bg-white p-6 shadow"
       >
-        <h1 className="text-xl text-black font-bold">管理員登入</h1>
+        <h1 className="text-xl font-bold text-black">管理員登入</h1>
 
         <input
-          type="email"
-          placeholder="Email"
-          className="w-full rounded border text-black px-3 py-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          placeholder="管理員帳號"
+          className="w-full rounded border px-3 py-2 text-black"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
         />
 
         <input
           type="password"
-          placeholder="Password"
-          className="w-full rounded border text-black px-3 py-2"
+          placeholder="管理員密碼"
+          className="w-full rounded border px-3 py-2 text-black"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
@@ -59,7 +64,7 @@ export default function AdminLoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded bg-black py-2 text-white"
+          className="w-full rounded bg-black py-2 text-white disabled:opacity-50"
         >
           {loading ? "登入中..." : "登入"}
         </button>
