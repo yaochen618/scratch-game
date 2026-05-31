@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import {
   getRemainingDays,
@@ -37,6 +38,9 @@ type CellRow = {
 export default async function RoomsPage({ params }: PageProps) {
   const { storeSlug } = await params;
 
+  const cookieStore = await cookies();
+  const staffId = cookieStore.get("staff_session")?.value;
+
   const { data: store, error: storeError } = await supabase
     .from("stores")
     .select(
@@ -53,6 +57,26 @@ export default async function RoomsPage({ params }: PageProps) {
         </div>
       </main>
     );
+  }
+
+  let canManageSpecialRules = false;
+  let canManageSpecialMode = false;
+
+  if (staffId) {
+    const { data: staff } = await supabase
+      .from("store_staff")
+      .select(
+        "id, store_id, can_manage_special_rules, can_manage_special_mode, is_active"
+      )
+      .eq("id", staffId)
+      .eq("store_id", store.id)
+      .eq("is_active", true)
+      .single();
+
+    if (staff) {
+      canManageSpecialRules = staff.can_manage_special_rules;
+      canManageSpecialMode = staff.can_manage_special_mode;
+    }
   }
 
   const { data: rooms, error: roomsError } = await supabase
@@ -117,7 +141,6 @@ export default async function RoomsPage({ params }: PageProps) {
 
         <section className="rounded-xl bg-white p-4 shadow">
           <div className="space-y-1 text-sm text-gray-700">
-            <div>方案：{store.plan_type ?? "未設定"}</div>
             <div>狀態：{store.is_active ? "啟用中" : "停用"}</div>
             <div>帳務：{store.billing_status ?? "未設定"}</div>
             <div>
@@ -177,7 +200,9 @@ export default async function RoomsPage({ params }: PageProps) {
                     className="rounded-xl border bg-white p-4 shadow"
                   >
                     <div className="font-bold text-black">{room.name}</div>
-                    <div className="text-sm text-gray-600">slug：{room.slug}</div>
+                    <div className="text-sm text-gray-600">
+                      slug：{room.slug}
+                    </div>
                     <div className="text-sm text-gray-600">
                       格數：{room.cell_count}
                     </div>
@@ -215,23 +240,35 @@ export default async function RoomsPage({ params }: PageProps) {
                         roomSlug={room.slug}
                         roomName={room.name}
                       />
+
                       <DeleteRoomButton
                         storeSlug={store.slug}
                         roomSlug={room.slug}
                         roomName={room.name}
                       />
+
                       <ToggleRoomStatusButton
                         storeSlug={store.slug}
                         roomSlug={room.slug}
                         currentStatus={room.status}
                         roomName={room.name}
                       />
+
                       <Link
                         href={`/merchant/${store.slug}/rooms/${room.slug}/records`}
                         className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
                       >
                         抽取紀錄
                       </Link>
+
+                      {(canManageSpecialRules || canManageSpecialMode) && (
+                        <Link
+                          href={`/merchant/${store.slug}/rooms/${room.slug}/special`}
+                          className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700"
+                        >
+                          特殊調整
+                        </Link>
+                      )}
                     </div>
                   </div>
                 );

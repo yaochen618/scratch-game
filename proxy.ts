@@ -4,12 +4,20 @@ import { createServerClient } from "@supabase/ssr";
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // 商家頁保護
   const merchantId = request.cookies.get("merchant_id")?.value;
+  const merchantSession = request.cookies.get("merchant_session")?.value;
+  const staffSession = request.cookies.get("staff_session")?.value;
+
   const isMerchantPage = pathname.startsWith("/merchant");
   const isMerchantLoginPage = pathname.startsWith("/merchant/login");
 
-  if (isMerchantPage && !isMerchantLoginPage && !merchantId) {
+  if (
+    isMerchantPage &&
+    !isMerchantLoginPage &&
+    !merchantId &&
+    !merchantSession &&
+    !staffSession
+  ) {
     return NextResponse.redirect(new URL("/merchant/login", request.url));
   }
 
@@ -17,7 +25,6 @@ export async function proxy(request: NextRequest) {
     request,
   });
 
-  // 只有 admin 才處理 supabase auth
   if (pathname.startsWith("/admin")) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

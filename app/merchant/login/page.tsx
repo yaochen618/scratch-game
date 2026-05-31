@@ -1,16 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function MerchantLoginPage() {
   const router = useRouter();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    if (loading) return;
 
     try {
       setLoading(true);
@@ -21,6 +24,7 @@ export default function MerchantLoginPage() {
           "Content-Type": "application/json",
         },
         cache: "no-store",
+        credentials: "include",
         body: JSON.stringify({
           username,
           password,
@@ -31,15 +35,7 @@ export default function MerchantLoginPage() {
       console.log("login status =", res.status);
       console.log("login rawText =", rawText);
 
-      let data: any = null;
-      try {
-        data = rawText ? JSON.parse(rawText) : null;
-      } catch (err) {
-        console.error("JSON parse error:", err);
-        alert("登入 API 回傳的不是 JSON，請看 console");
-        return;
-      }
-
+      const data = rawText ? JSON.parse(rawText) : null;
       console.log("login data =", data);
 
       if (!res.ok) {
@@ -47,19 +43,18 @@ export default function MerchantLoginPage() {
         return;
       }
 
-      const storeSlug = data?.merchant?.storeSlug;
-      console.log("storeSlug =", storeSlug);
+      console.log("login type =", data?.type);
 
-      if (!storeSlug) {
-        alert("登入成功，但找不到店家資訊");
+      if (data?.type === "staff") {
+        window.location.replace(`/merchant/${data.staff.storeSlug}/rooms`);
         return;
       }
 
-      router.push(`/merchant`);
-      router.refresh();
+      window.location.replace("/merchant");
+      return;
     } catch (error) {
       console.error("login error =", error);
-      alert("發生錯誤，請看 console");
+      alert("登入發生錯誤，請看 Console");
     } finally {
       setLoading(false);
     }
@@ -68,7 +63,9 @@ export default function MerchantLoginPage() {
   return (
     <main className="min-h-screen bg-blue-200 px-4 py-10">
       <div className="mx-auto max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="mb-6 text-2xl font-bold text-black">商家登入</h1>
+        <h1 className="mb-6 text-2xl font-bold text-black">
+          商家登入
+        </h1>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -79,6 +76,8 @@ export default function MerchantLoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-lg border px-3 py-2 text-black"
+              placeholder="請輸入帳號"
+              autoComplete="username"
             />
           </div>
 
@@ -91,6 +90,8 @@ export default function MerchantLoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border px-3 py-2 text-black"
+              placeholder="請輸入密碼"
+              autoComplete="current-password"
             />
           </div>
 

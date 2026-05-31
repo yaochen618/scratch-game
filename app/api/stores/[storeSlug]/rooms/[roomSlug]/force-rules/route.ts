@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import {
   cleanupForceRules,
   normalizeForceRules,
   validateForceRules,
 } from "@/lib/force-rules";
-
-function isSystemAdmin(request: NextRequest) {
-  const adminKey = request.headers.get("x-system-admin-key");
-  return adminKey === process.env.SYSTEM_ADMIN_KEY;
-}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +30,38 @@ type SpecialMode = {
   initial_pool?: number[];
   add_rules?: SpecialModeRule[];
 };
+
+function isSystemAdmin(request: NextRequest) {
+  const adminKey = request.headers.get("x-system-admin-key");
+  return adminKey === process.env.SYSTEM_ADMIN_KEY;
+}
+
+async function checkStaffPermission(storeId: number | string) {
+  const cookieStore = await cookies();
+  const staffId = cookieStore.get("staff_session")?.value;
+
+  if (!staffId) {
+    return false;
+  }
+
+  const { data: staff } = await supabase
+    .from("store_staff")
+    .select(
+      "id, store_id, can_manage_special_rules, can_manage_special_mode, is_active"
+    )
+    .eq("id", staffId)
+    .eq("store_id", storeId)
+    .eq("is_active", true)
+    .single();
+
+  if (!staff) {
+    return false;
+  }
+
+  return Boolean(
+    staff.can_manage_special_rules || staff.can_manage_special_mode
+  );
+}
 
 function normalizeSpecialMode(input: unknown): SpecialMode | null {
   if (!input || typeof input !== "object") return null;
@@ -123,6 +151,7 @@ function validateSpecialMode({
           message: "initial_pool 只能包含大於 0 的整數",
         };
       }
+
       if (n > cellCount) {
         return {
           ok: false,
@@ -197,10 +226,6 @@ function validateSpecialMode({
 
 export async function GET(req: NextRequest, context: RouteContext) {
   try {
-    if (!isSystemAdmin(req)) {
-      return NextResponse.json({ error: "無權限使用此功能" }, { status: 403 });
-    }
-
     const { storeSlug, roomSlug } = await context.params;
 
     const { data: store, error: storeError } = await supabase
@@ -211,25 +236,45 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     if (storeError || !store) {
       return NextResponse.json(
-        { error: "找不到商店", detail: storeError?.message ?? null, storeSlug },
+        {
+          error: "找不到商店",
+          detail: storeError?.message ?? null,
+          storeSlug,
+        },
         { status: 404 }
+      );
+    }
+
+    const canUse = isSystemAdmin(req) || (await checkStaffPermission(store.id));
+
+    if (!canUse) {
+      return NextResponse.json(
+        { error: "無權限使用此功能" },
+        { status: 403 }
       );
     }
 
     const { data: room, error: roomError } = await supabase
       .from("rooms")
-      .select("id, slug, store_id, cell_count, force_rules, draw_mode, special_mode")
+      .select(
+        "id, slug, store_id, cell_count, force_rules, draw_mode, special_mode"
+      )
       .eq("slug", roomSlug)
       .single();
 
     if (roomError || !room) {
       return NextResponse.json(
-        { error: "找不到房間", detail: roomError?.message ?? null, storeSlug, roomSlug },
+        {
+          error: "找不到房間",
+          detail: roomError?.message ?? null,
+          storeSlug,
+          roomSlug,
+        },
         { status: 404 }
       );
     }
 
-    if (room.store_id !== store.id) {
+    if (String(room.store_id) !== String(store.id)) {
       return NextResponse.json(
         { error: "房間不屬於這個商店", storeSlug, roomSlug },
         { status: 400 }
@@ -272,12 +317,34 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
   try {
-    if (!isSystemAdmin(req)) {
-      return NextResponse.json({ error: "無權限使用此功能" }, { status: 403 });
-    }
-
     const { storeSlug, roomSlug } = await context.params;
     const body = await req.json();
+
+    const { data: store, error: storeError } = await supabase
+      .from("stores")
+      .select("id, slug")
+      .eq("slug", storeSlug)
+      .single();
+
+    if (storeError || !store) {
+      return NextResponse.json(
+        {
+          error: "找不到商店",
+          detail: storeError?.message ?? null,
+          storeSlug,
+        },
+        { status: 404 }
+      );
+    }
+
+    const canUse = isSystemAdmin(req) || (await checkStaffPermission(store.id));
+
+    if (!canUse) {
+      return NextResponse.json(
+        { error: "無權限使用此功能" },
+        { status: 403 }
+      );
+    }
 
     const incomingRules = cleanupForceRules(
       normalizeForceRules(body?.force_rules)
@@ -288,33 +355,27 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     const incomingSpecialMode = normalizeSpecialMode(body?.special_mode);
 
-    const { data: store, error: storeError } = await supabase
-      .from("stores")
-      .select("id, slug")
-      .eq("slug", storeSlug)
-      .single();
-
-    if (storeError || !store) {
-      return NextResponse.json(
-        { error: "找不到商店", detail: storeError?.message ?? null, storeSlug },
-        { status: 404 }
-      );
-    }
-
     const { data: room, error: roomError } = await supabase
       .from("rooms")
-      .select("id, slug, store_id, cell_count, force_rules, draw_mode, special_mode")
+      .select(
+        "id, slug, store_id, cell_count, force_rules, draw_mode, special_mode"
+      )
       .eq("slug", roomSlug)
       .single();
 
     if (roomError || !room) {
       return NextResponse.json(
-        { error: "找不到房間", detail: roomError?.message ?? null, storeSlug, roomSlug },
+        {
+          error: "找不到房間",
+          detail: roomError?.message ?? null,
+          storeSlug,
+          roomSlug,
+        },
         { status: 404 }
       );
     }
 
-    if (room.store_id !== store.id) {
+    if (String(room.store_id) !== String(store.id)) {
       return NextResponse.json(
         { error: "房間不屬於這個商店", storeSlug, roomSlug },
         { status: 400 }
@@ -343,7 +404,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     });
 
     if (!forceValidation.ok) {
-      return NextResponse.json({ error: forceValidation.message }, { status: 400 });
+      return NextResponse.json(
+        { error: forceValidation.message },
+        { status: 400 }
+      );
     }
 
     const specialValidation = validateSpecialMode({
@@ -353,7 +417,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     });
 
     if (!specialValidation.ok) {
-      return NextResponse.json({ error: specialValidation.message }, { status: 400 });
+      return NextResponse.json(
+        { error: specialValidation.message },
+        { status: 400 }
+      );
     }
 
     const { error: updateError } = await supabase
@@ -361,7 +428,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .update({
         force_rules: incomingRules,
         draw_mode: incomingDrawMode,
-        special_mode: incomingDrawMode === "special" ? incomingSpecialMode : null,
+        special_mode:
+          incomingDrawMode === "special" ? incomingSpecialMode : null,
       })
       .eq("id", room.id);
 
@@ -376,7 +444,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       success: true,
       force_rules: incomingRules,
       draw_mode: incomingDrawMode,
-      special_mode: incomingDrawMode === "special" ? incomingSpecialMode : null,
+      special_mode:
+        incomingDrawMode === "special" ? incomingSpecialMode : null,
     });
   } catch (error) {
     console.error("PATCH force-rules error:", error);
