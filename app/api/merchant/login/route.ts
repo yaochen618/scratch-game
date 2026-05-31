@@ -74,14 +74,17 @@ export async function POST(req: Request) {
 
       const firstStore = stores[0];
 
-      const { data: staffRole } = await supabase
+      const { data: staffRoles } = await supabase
         .from("store_staff")
         .select(
           "id, store_id, username, can_manage_special_rules, can_manage_special_mode, is_active"
         )
         .eq("username", merchant.username)
-        .eq("is_active", true)
-        .maybeSingle();
+        .eq("is_active", true);
+
+      const staffRole = staffRoles?.find(
+        (role) => String(role.store_id) === String(firstStore.id)
+      );
 
       const res = NextResponse.json({
         success: true,

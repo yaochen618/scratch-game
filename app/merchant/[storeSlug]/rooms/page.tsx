@@ -1,10 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
-import {
-  getRemainingDays,
-  isMerchantExpired,
-} from "@/lib/merchant-plan";
+import { getRemainingDays, isMerchantExpired } from "@/lib/merchant-plan";
 import ResetRoomButton from "@/components/reset-room-button";
 import CreateRoomForm from "@/components/create-room-form";
 import DeleteRoomButton from "@/components/delete-room-button";
@@ -39,7 +36,7 @@ export default async function RoomsPage({ params }: PageProps) {
   const { storeSlug } = await params;
 
   const cookieStore = await cookies();
-  const staffId = cookieStore.get("staff_session")?.value;
+  const merchantId = cookieStore.get("merchant_id")?.value;
 
   const { data: store, error: storeError } = await supabase
     .from("stores")
@@ -62,20 +59,28 @@ export default async function RoomsPage({ params }: PageProps) {
   let canManageSpecialRules = false;
   let canManageSpecialMode = false;
 
-  if (staffId) {
-    const { data: staff } = await supabase
-      .from("store_staff")
-      .select(
-        "id, store_id, can_manage_special_rules, can_manage_special_mode, is_active"
-      )
-      .eq("id", staffId)
-      .eq("store_id", store.id)
-      .eq("is_active", true)
-      .single();
+  if (merchantId) {
+    const { data: merchant } = await supabase
+      .from("merchant_accounts")
+      .select("username")
+      .eq("id", merchantId)
+      .maybeSingle();
 
-    if (staff) {
-      canManageSpecialRules = staff.can_manage_special_rules;
-      canManageSpecialMode = staff.can_manage_special_mode;
+    if (merchant) {
+      const { data: staff } = await supabase
+        .from("store_staff")
+        .select(
+          "can_manage_special_rules, can_manage_special_mode, is_active"
+        )
+        .eq("username", merchant.username)
+        .eq("store_id", store.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (staff) {
+        canManageSpecialRules = staff.can_manage_special_rules;
+        canManageSpecialMode = staff.can_manage_special_mode;
+      }
     }
   }
 
@@ -141,6 +146,7 @@ export default async function RoomsPage({ params }: PageProps) {
 
         <section className="rounded-xl bg-white p-4 shadow">
           <div className="space-y-1 text-sm text-gray-700">
+            <div>方案：{store.plan_type ?? "未設定"}</div>
             <div>狀態：{store.is_active ? "啟用中" : "停用"}</div>
             <div>帳務：{store.billing_status ?? "未設定"}</div>
             <div>
@@ -200,12 +206,15 @@ export default async function RoomsPage({ params }: PageProps) {
                     className="rounded-xl border bg-white p-4 shadow"
                   >
                     <div className="font-bold text-black">{room.name}</div>
+
                     <div className="text-sm text-gray-600">
                       slug：{room.slug}
                     </div>
+
                     <div className="text-sm text-gray-600">
                       格數：{room.cell_count}
                     </div>
+
                     <div className="text-sm text-gray-600">
                       狀態：{room.status}
                     </div>
