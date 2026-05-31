@@ -80,7 +80,6 @@ export async function POST(req: Request) {
           "id, store_id, username, can_manage_special_rules, can_manage_special_mode, is_active"
         )
         .eq("username", merchant.username)
-        .eq("store_id", firstStore.id)
         .eq("is_active", true)
         .maybeSingle();
 
