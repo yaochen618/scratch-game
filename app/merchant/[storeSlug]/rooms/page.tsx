@@ -226,6 +226,12 @@ export default async function RoomsPage({ params }: PageProps) {
                         currentStatus={room.status}
                         roomName={room.name}
                       />
+                      <Link
+                        href={`/merchant/${store.slug}/rooms/${room.slug}/records`}
+                        className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                      >
+                        抽取紀錄
+                      </Link>
                     </div>
                   </div>
                 );

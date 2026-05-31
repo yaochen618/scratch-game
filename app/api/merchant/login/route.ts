@@ -29,7 +29,6 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (merchantError) {
-      console.error("merchant query error:", merchantError);
       return NextResponse.json(
         { error: `讀取商家資料失敗：${merchantError.message}` },
         { status: 500 }
@@ -59,34 +58,27 @@ export async function POST(req: Request) {
       );
     }
 
-    // 依商家帳號找對應店家
-    const { data: store, error: storeError } = await supabase
+    const { data: stores, error: storeError } = await supabase
       .from("stores")
       .select("id, slug, name, is_active, expires_at")
       .eq("merchant_id", merchant.id)
-      .maybeSingle();
+      .order("name", { ascending: true });
 
     if (storeError) {
-      console.error("store query error:", storeError);
       return NextResponse.json(
         { error: `讀取店家資料失敗：${storeError.message}` },
         { status: 500 }
       );
     }
 
-    if (!store) {
+    if (!stores || stores.length === 0) {
       return NextResponse.json(
         { error: "此商家帳號尚未綁定店家" },
         { status: 404 }
       );
     }
 
-    if (store.is_active === false) {
-      return NextResponse.json(
-        { error: "此店家目前已停用" },
-        { status: 403 }
-      );
-    }
+    const firstStore = stores[0];
 
     const res = NextResponse.json({
       success: true,
@@ -94,8 +86,9 @@ export async function POST(req: Request) {
         id: merchant.id,
         username: merchant.username,
         display_name: merchant.display_name,
-        storeSlug: store.slug,
-        storeName: store.name,
+        storeSlug: firstStore.slug,
+        storeName: firstStore.name,
+        stores,
       },
     });
 
@@ -107,7 +100,7 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    res.cookies.set("merchant_store_slug", store.slug, {
+    res.cookies.set("merchant_store_slug", firstStore.slug, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -117,8 +110,6 @@ export async function POST(req: Request) {
 
     return res;
   } catch (error) {
-    console.error("merchant login unexpected error:", error);
-
     return NextResponse.json(
       {
         error:
