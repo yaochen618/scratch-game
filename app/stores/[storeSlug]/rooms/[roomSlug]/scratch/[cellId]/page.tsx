@@ -15,6 +15,7 @@ type CellResult = {
 const CANVAS_SIZE = 300;
 const BRUSH_RADIUS = 28;
 const REVEAL_PERCENT = 0.45;
+const TOUCH_Y_OFFSET = 20;
 
 export default function ScratchPage() {
   const params = useParams();
@@ -33,6 +34,7 @@ export default function ScratchPage() {
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
+  const [maskReady, setMaskReady] = useState(false);
 
   const formattedNumber = useMemo(() => {
     if (!result) return "00";
@@ -44,6 +46,8 @@ export default function ScratchPage() {
 
     const fetchPreview = async () => {
       try {
+        setMaskReady(false);
+
         const res = await fetch(
           `/api/stores/${storeSlug}/rooms/${roomSlug}/scratch/preview`,
           {
@@ -109,6 +113,7 @@ export default function ScratchPage() {
 
     if (showMeta) {
       clearMask();
+      setMaskReady(true);
     } else {
       initMask();
     }
@@ -120,6 +125,8 @@ export default function ScratchPage() {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    setMaskReady(false);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.globalCompositeOperation = "source-over";
@@ -140,6 +147,8 @@ export default function ScratchPage() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("刮開", canvas.width / 2, canvas.height / 2);
+
+    setMaskReady(true);
   };
 
   const clearMask = () => {
@@ -249,7 +258,11 @@ export default function ScratchPage() {
     return transparentPixels / totalCirclePixels;
   };
 
-  const scratchAt = async (clientX: number, clientY: number) => {
+  const scratchAt = async (
+    clientX: number,
+    clientY: number,
+    yOffset = 0
+  ) => {
     if (!ready || submitting || showMeta || !result) return;
 
     const canvas = canvasRef.current;
@@ -264,7 +277,7 @@ export default function ScratchPage() {
     const scaleY = canvas.height / rect.height;
 
     const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
+    const y = (clientY - rect.top + yOffset) * scaleY;
 
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
@@ -301,12 +314,13 @@ export default function ScratchPage() {
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
     isScratchingRef.current = true;
 
     const touch = e.touches[0];
     if (!touch) return;
 
-    scratchAt(touch.clientX, touch.clientY);
+    scratchAt(touch.clientX, touch.clientY, TOUCH_Y_OFFSET);
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -317,7 +331,7 @@ export default function ScratchPage() {
     const touch = e.touches[0];
     if (!touch) return;
 
-    scratchAt(touch.clientX, touch.clientY);
+    scratchAt(touch.clientX, touch.clientY, TOUCH_Y_OFFSET);
   };
 
   const handleTouchEnd = () => {
@@ -329,9 +343,7 @@ export default function ScratchPage() {
       <div className="mx-auto max-w-md">
         <div
           className={`rounded-3xl p-5 text-center shadow-lg ${
-            result?.is_winner && showMeta
-              ? "bg-yellow-100"
-              : "bg-white"
+            result?.is_winner && showMeta ? "bg-yellow-100" : "bg-white"
           }`}
         >
           <h1 className="mb-4 text-xl font-bold text-black">
@@ -354,7 +366,9 @@ export default function ScratchPage() {
             >
               <div className="absolute inset-0 flex items-center justify-center">
                 <span
-                  className={`text-8xl font-bold tracking-wide ${
+                  className={`text-8xl font-bold tracking-wide transition-opacity duration-150 ${
+                    maskReady || showMeta ? "opacity-100" : "opacity-0"
+                  } ${
                     result?.is_winner && showMeta
                       ? "text-red-600"
                       : "text-black"
@@ -376,6 +390,7 @@ export default function ScratchPage() {
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
               />
             </div>
           </div>
