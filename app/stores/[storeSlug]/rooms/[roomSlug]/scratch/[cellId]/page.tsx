@@ -42,12 +42,14 @@ export default function ScratchPage() {
   }, [result]);
 
   useEffect(() => {
+    initMask();
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     const fetchPreview = async () => {
       try {
-        setMaskReady(false);
-
         const res = await fetch(
           `/api/stores/${storeSlug}/rooms/${roomSlug}/scratch/preview`,
           {
@@ -94,6 +96,7 @@ export default function ScratchPage() {
         if (previewResult.is_revealed) {
           hasTriggeredRevealRef.current = true;
           setShowMeta(true);
+          clearMask();
         }
       } catch (error) {
         console.error("scratch page preview error:", error);
@@ -107,17 +110,6 @@ export default function ScratchPage() {
       cancelled = true;
     };
   }, [storeSlug, roomSlug, cellId]);
-
-  useEffect(() => {
-    if (!ready) return;
-
-    if (showMeta) {
-      clearMask();
-      setMaskReady(true);
-    } else {
-      initMask();
-    }
-  }, [ready, showMeta]);
 
   const initMask = () => {
     const canvas = canvasRef.current;
@@ -288,12 +280,12 @@ export default function ScratchPage() {
 
     if (percent >= REVEAL_PERCENT && !hasTriggeredRevealRef.current) {
       clearMask();
+      setShowMeta(true);
 
       const ok = await revealFinal();
 
-      if (ok) {
-        setShowMeta(true);
-      } else {
+      if (!ok) {
+        setShowMeta(false);
         initMask();
       }
     }
