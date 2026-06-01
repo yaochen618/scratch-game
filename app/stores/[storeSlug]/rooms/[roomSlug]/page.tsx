@@ -10,6 +10,7 @@ type Cell = {
   is_revealed: boolean;
   revealed_number: number | null;
   revealed_at: string | null;
+  is_winner?: boolean | null;
   session_id?: string | null;
 };
 
@@ -35,27 +36,20 @@ const supabase = createClient(
 function getGridColumns(cellCount: number) {
   switch (cellCount) {
     case 6:
-      return 3;
     case 9:
       return 3;
     case 15:
       return 3;
     case 20:
-      return 5;
     case 25:
-      return 5;
     case 30:
-      return 5;
     case 40:
-      return 5;
     case 50:
       return 5;
     case 60:
       return 6;
     case 100:
-      return 10;
     case 120:
-      return 10;
     case 200:
       return 10;
     default:
@@ -69,6 +63,18 @@ function getCellSize(cellCount: number) {
   if (cellCount <= 60) return 52;
   if (cellCount <= 120) return 42;
   return 38;
+}
+
+function getCellClassName(cell: Cell) {
+  if (!cell.is_revealed) {
+    return "cursor-pointer border-gray-400 bg-gray-200 text-gray-700 hover:bg-gray-300 active:scale-95";
+  }
+
+  if (cell.is_winner) {
+    return "cursor-not-allowed border-red-500 bg-red-500 text-white shadow-lg";
+  }
+
+  return "cursor-not-allowed border-yellow-300 bg-white text-black";
 }
 
 export default function RoomBoardPage() {
@@ -100,8 +106,6 @@ export default function RoomBoardPage() {
         });
 
         const text = await res.text();
-        console.log("room detail status =", res.status);
-        console.log("room detail raw =", text);
 
         let data: RoomApiResponse | null = null;
 
@@ -124,8 +128,6 @@ export default function RoomBoardPage() {
           nextCells.find((cell) => cell.session_id)?.session_id ||
           null;
 
-        console.log("nextSessionId =", nextSessionId);
-
         setRoom(nextRoom);
         setCells(nextCells);
         setSessionId(nextSessionId);
@@ -146,12 +148,7 @@ export default function RoomBoardPage() {
   }, [storeSlug, roomSlug, fetchRoomData]);
 
   useEffect(() => {
-    if (!sessionId) {
-      console.log("沒有 sessionId，Realtime 不會啟動");
-      return;
-    }
-
-    console.log("開始訂閱 session =", sessionId);
+    if (!sessionId) return;
 
     const channel = supabase
       .channel(`room-board-${sessionId}`)
@@ -163,14 +160,11 @@ export default function RoomBoardPage() {
           table: "session_cells",
           filter: `session_id=eq.${sessionId}`,
         },
-        async (payload) => {
-          console.log("收到 session_cells 更新：", payload);
+        async () => {
           await fetchRoomData(false);
         }
       )
-      .subscribe((status) => {
-        console.log("Realtime 狀態 =", status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -241,6 +235,7 @@ export default function RoomBoardPage() {
         >
           ← 返回商店頁面
         </button>
+
         <div className="text-black">載入中...</div>
       </main>
     );
@@ -256,6 +251,7 @@ export default function RoomBoardPage() {
         >
           ← 返回商店頁面
         </button>
+
         <div className="text-red-500">{errorMsg}</div>
       </main>
     );
@@ -271,6 +267,7 @@ export default function RoomBoardPage() {
         >
           ← 返回商店頁面
         </button>
+
         <div className="text-black">找不到刮板</div>
       </main>
     );
@@ -331,11 +328,9 @@ export default function RoomBoardPage() {
                 type="button"
                 disabled={cell.is_revealed || drawing || navigating}
                 onClick={() => handleSelectCell(cell)}
-                className={`flex shrink-0 items-center justify-center rounded-xl border font-bold transition ${
-                  cell.is_revealed
-                    ? "cursor-not-allowed border-yellow-300 bg-white text-black"
-                    : "cursor-pointer border-gray-400 bg-gray-200 text-gray-700 hover:bg-gray-300 active:scale-95"
-                }`}
+                className={`flex shrink-0 items-center justify-center rounded-xl border font-bold transition ${getCellClassName(
+                  cell
+                )}`}
                 style={{
                   width: `${cellSize}px`,
                   height: `${cellSize}px`,

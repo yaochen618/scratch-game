@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import ModeSelect from "./mode-select";
 import ForceRulesEditor from "./force-rules-editor";
 
@@ -11,7 +11,10 @@ type PageProps = {
 
 export default async function AdminRoomsPage({ params }: PageProps) {
   const { storeSlug } = await params;
-  const supabase = await createClient();
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
   const { data: store, error: storeError } = await supabase
     .from("stores")
@@ -67,17 +70,6 @@ export default async function AdminRoomsPage({ params }: PageProps) {
         {!rooms || rooms.length === 0 ? (
           <div className="rounded-xl border p-6 text-gray-500">
             尚無房間
-            <pre className="mt-4 whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs text-gray-600">
-{JSON.stringify(
-  {
-    store,
-    rooms,
-    roomsError: roomsError?.message ?? null,
-  },
-  null,
-  2
-)}
-            </pre>
           </div>
         ) : (
           <div className="space-y-4">

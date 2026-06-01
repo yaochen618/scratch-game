@@ -15,8 +15,18 @@ export default function CreateRoomButton({ storeSlug }: Props) {
     const name = window.prompt("請輸入刮板名稱");
     if (!name) return;
 
-    const slug = window.prompt("請輸入刮板代稱 slug（例如 board-2）");
+    const slug = window.prompt("請輸入刮板代號 slug，例如 board-1");
     if (!slug) return;
+
+    const cellCountInput = window.prompt("請輸入格子數量，例如 100", "100");
+    if (!cellCountInput) return;
+
+    const cellCount = Number(cellCountInput);
+
+    if (!Number.isInteger(cellCount) || cellCount < 1 || cellCount > 1000) {
+      alert("格子數量必須是 1 ~ 1000 的整數");
+      return;
+    }
 
     const drawMode =
       window.prompt("請輸入模式：uniform 或 special", "uniform") || "uniform";
@@ -33,6 +43,7 @@ export default function CreateRoomButton({ storeSlug }: Props) {
           name,
           slug,
           draw_mode: drawMode,
+          cell_count: cellCount,
         }),
       });
 

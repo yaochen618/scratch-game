@@ -17,7 +17,12 @@ export async function POST(req: Request, context: RouteContext) {
     const { storeSlug } = await context.params;
     const body = await req.json();
 
-    const { name, slug, draw_mode } = body;
+    const {
+      name,
+      slug,
+      draw_mode,
+      cell_count,
+    } = body;
 
     if (!name || !slug) {
       return NextResponse.json(
@@ -26,7 +31,20 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    // 1. 找 store
+    const cellCount = Number(cell_count);
+
+    if (
+      !Number.isInteger(cellCount) ||
+      cellCount < 1 ||
+      cellCount > 1000
+    ) {
+      return NextResponse.json(
+        { error: "格數必須介於 1 ~ 1000" },
+        { status: 400 }
+      );
+    }
+
+    // 找商店
     const { data: store } = await supabase
       .from("stores")
       .select("id, name, slug, announcement")
@@ -34,10 +52,13 @@ export async function POST(req: Request, context: RouteContext) {
       .single();
 
     if (!store) {
-      return NextResponse.json({ error: "找不到商店" }, { status: 404 });
+      return NextResponse.json(
+        { error: "找不到商店" },
+        { status: 404 }
+      );
     }
 
-    // 2. 建立 room
+    // 建立房間
     const { data: room, error: roomError } = await supabase
       .from("rooms")
       .insert({
@@ -45,7 +66,7 @@ export async function POST(req: Request, context: RouteContext) {
         name,
         slug,
         status: "active",
-        cell_count: 30,
+        cell_count: cellCount,
         draw_mode: draw_mode || "uniform",
       })
       .select("id")
@@ -53,19 +74,25 @@ export async function POST(req: Request, context: RouteContext) {
 
     if (roomError || !room) {
       return NextResponse.json(
-        { error: "建立房間失敗", detail: roomError?.message },
+        {
+          error: "建立房間失敗",
+          detail: roomError?.message,
+        },
         { status: 500 }
       );
     }
 
-    // 3. 建立 30 格 cells
-    const cells = Array.from({ length: 30 }, (_, i) => ({
-      room_id: room.id,
-      cell_index: i + 1,
-      is_revealed: false,
-      revealed_number: null,
-      revealed_at: null,
-    }));
+    // 建立對應數量格子
+    const cells = Array.from(
+      { length: cellCount },
+      (_, i) => ({
+        room_id: room.id,
+        cell_index: i + 1,
+        is_revealed: false,
+        revealed_number: null,
+        revealed_at: null,
+      })
+    );
 
     const { error: cellError } = await supabase
       .from("cells")
@@ -73,7 +100,10 @@ export async function POST(req: Request, context: RouteContext) {
 
     if (cellError) {
       return NextResponse.json(
-        { error: "建立格子失敗", detail: cellError.message },
+        {
+          error: "建立格子失敗",
+          detail: cellError.message,
+        },
         { status: 500 }
       );
     }
@@ -81,9 +111,14 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({
       success: true,
       roomId: room.id,
+      cellCount,
     });
   } catch (error) {
     console.error("create room error:", error);
-    return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "伺服器錯誤" },
+      { status: 500 }
+    );
   }
 }

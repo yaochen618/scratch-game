@@ -6,6 +6,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+function parsePrizeNumbers(value: string | null | undefined) {
+  if (!value) return [];
+
+  return value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((number) => Number.isInteger(number));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -17,7 +26,16 @@ export async function POST(req: NextRequest) {
 
     const { data: cell, error: cellError } = await supabase
       .from("cells")
-      .select("id, revealed_number, draw_order, is_revealed, revealed_at")
+      .select(
+        `
+        id,
+        room_id,
+        revealed_number,
+        draw_order,
+        is_revealed,
+        revealed_at
+      `
+      )
       .eq("id", cellId)
       .single();
 
@@ -32,7 +50,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 已經正式揭露過就直接回同一個結果
+    const { data: room, error: roomError } = await supabase
+      .from("rooms")
+      .select("prize_numbers")
+      .eq("id", cell.room_id)
+      .single();
+
+    if (roomError || !room) {
+      return NextResponse.json({ error: "找不到房間" }, { status: 404 });
+    }
+
+    const prizeNumbers = parsePrizeNumbers(room.prize_numbers);
+    const isWinner =
+      prizeNumbers.length > 0 &&
+      prizeNumbers.includes(Number(cell.revealed_number));
+
     if (cell.is_revealed) {
       return NextResponse.json({
         success: true,
@@ -41,18 +73,19 @@ export async function POST(req: NextRequest) {
           revealed_number: cell.revealed_number,
           draw_order: cell.draw_order,
           revealed_at: cell.revealed_at,
+          is_winner: isWinner,
         },
       });
     }
 
     const now = new Date().toISOString();
 
-    // 防止多人同時點
     const { data: updatedRows, error: updateError } = await supabase
       .from("cells")
       .update({
         is_revealed: true,
         revealed_at: now,
+        is_winner: isWinner,
       })
       .eq("id", cellId)
       .eq("is_revealed", false)
@@ -63,17 +96,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    // 沒更新到，代表別人先按了，直接回最新值
     if (!updatedRows || updatedRows.length === 0) {
       const { data: latestCell, error: latestCellError } = await supabase
         .from("cells")
-        .select("id, revealed_number, draw_order, revealed_at")
+        .select("id, room_id, revealed_number, draw_order, revealed_at")
         .eq("id", cellId)
         .single();
 
       if (latestCellError || !latestCell) {
-        return NextResponse.json({ error: "格子狀態更新失敗" }, { status: 409 });
+        return NextResponse.json(
+          { error: "格子狀態更新失敗" },
+          { status: 409 }
+        );
       }
+
+      const latestPrizeNumbers = parsePrizeNumbers(room.prize_numbers);
+      const latestIsWinner =
+        latestPrizeNumbers.length > 0 &&
+        latestPrizeNumbers.includes(Number(latestCell.revealed_number));
 
       return NextResponse.json({
         success: true,
@@ -82,6 +122,7 @@ export async function POST(req: NextRequest) {
           revealed_number: latestCell.revealed_number,
           draw_order: latestCell.draw_order,
           revealed_at: latestCell.revealed_at,
+          is_winner: latestIsWinner,
         },
       });
     }
@@ -93,6 +134,7 @@ export async function POST(req: NextRequest) {
         revealed_number: cell.revealed_number,
         draw_order: cell.draw_order,
         revealed_at: now,
+        is_winner: isWinner,
       },
     });
   } catch (err) {

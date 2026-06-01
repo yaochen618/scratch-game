@@ -20,7 +20,25 @@ type Room = {
   revealed_count: number;
   remaining_count: number;
   progress_percent: number;
+
+  prize_numbers?: string | null;
+  prize_total_count?: number;
+  revealed_prize_count?: number;
+  remaining_prize_count?: number;
 };
+
+function hasPrizeSetting(room: Room) {
+  return Boolean(room.prize_numbers && room.prize_numbers.trim());
+}
+
+function getPrizeRate(room: Room) {
+  const remainingPrize = room.remaining_prize_count ?? 0;
+  const remainingCells = room.remaining_count ?? 0;
+
+  if (remainingCells <= 0) return 0;
+
+  return Math.round((remainingPrize / remainingCells) * 1000) / 10;
+}
 
 export default function StoreDetailPage() {
   const params = useParams();
@@ -115,67 +133,103 @@ export default function StoreDetailPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {rooms.map((room) => (
-              <button
-                key={room.id}
-                type="button"
-                onClick={() =>
-                  router.push(`/stores/${storeSlug}/rooms/${room.slug}`)
-                }
-                className="w-full rounded-2xl border bg-white p-4 text-left shadow transition active:scale-[0.98]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-bold text-black">{room.name}</div>
-                    <div className="mt-1 text-sm text-gray-500">
-                      代號：{room.slug}
-                    </div>
-                    <div className="mt-1 text-sm text-gray-500">
-                      狀態：{room.status}
-                    </div>
-                  </div>
+            {rooms.map((room) => {
+              const showPrizeInfo = hasPrizeSetting(room);
+              const prizeRate = getPrizeRate(room);
 
-                  <div className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
-                    {room.progress_percent}%
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <div className="mb-2 flex items-center justify-between text-sm text-gray-600">
-                    <span>刮卡進度</span>
-                    <span>
-                      已刮 {room.revealed_count} / {room.cell_count}
-                    </span>
-                  </div>
-
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-200">
-                    <div
-                      className="h-full rounded-full bg-blue-500 transition-all"
-                      style={{ width: `${room.progress_percent}%` }}
-                    />
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
-                    <div className="rounded-xl bg-gray-100 px-3 py-2">
-                      <div className="text-gray-500">總格數</div>
-                      <div className="font-bold text-black">{room.cell_count}</div>
-                    </div>
-                    <div className="rounded-xl bg-green-100 px-3 py-2">
-                      <div className="text-green-700">已刮</div>
-                      <div className="font-bold text-green-800">
-                        {room.revealed_count}
+              return (
+                <button
+                  key={room.id}
+                  type="button"
+                  onClick={() =>
+                    router.push(`/stores/${storeSlug}/rooms/${room.slug}`)
+                  }
+                  className="w-full rounded-2xl border bg-white p-4 text-left shadow transition active:scale-[0.98]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-bold text-black">
+                        {room.name}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        代號：{room.slug}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        狀態：{room.status}
                       </div>
                     </div>
-                    <div className="rounded-xl bg-orange-100 px-3 py-2">
-                      <div className="text-orange-700">剩餘</div>
-                      <div className="font-bold text-orange-800">
-                        {room.remaining_count}
-                      </div>
+
+                    <div className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
+                      {room.progress_percent}%
                     </div>
                   </div>
-                </div>
-              </button>
-            ))}
+
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between text-sm text-gray-600">
+                      <span>刮卡進度</span>
+                      <span>
+                        已刮 {room.revealed_count} / {room.cell_count}
+                      </span>
+                    </div>
+
+                    <div className="h-3 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className="h-full rounded-full bg-blue-500 transition-all"
+                        style={{ width: `${room.progress_percent}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+                      <div className="rounded-xl bg-gray-100 px-3 py-2">
+                        <div className="text-gray-500">總格數</div>
+                        <div className="font-bold text-black">
+                          {room.cell_count}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-green-100 px-3 py-2">
+                        <div className="text-green-700">已刮</div>
+                        <div className="font-bold text-green-800">
+                          {room.revealed_count}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-orange-100 px-3 py-2">
+                        <div className="text-orange-700">剩餘</div>
+                        <div className="font-bold text-orange-800">
+                          {room.remaining_count}
+                        </div>
+                      </div>
+                    </div>
+
+                    {showPrizeInfo && (
+                      <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3">
+                        <div className="grid grid-cols-2 gap-2 text-center text-sm">
+                          <div className="rounded-xl bg-white px-3 py-2">
+                            <div className="text-red-600">已開出獎</div>
+                            <div className="font-bold text-red-700">
+                              {room.revealed_prize_count ?? 0} /{" "}
+                              {room.prize_total_count ?? 0}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl bg-white px-3 py-2">
+                            <div className="text-red-600">剩餘中獎機率</div>
+                            <div className="font-bold text-red-700">
+                              {prizeRate}%
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="mt-2 text-xs text-red-500">
+                          依目前剩餘獎數 / 剩餘格數計算
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

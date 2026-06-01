@@ -24,6 +24,15 @@ function makeSlug(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function parsePrizeNumbers(value: string | null | undefined) {
+  if (!value) return [];
+
+  return value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((number) => Number.isInteger(number));
+}
+
 async function createUniqueRoomSlug(baseName: string) {
   const baseSlug = makeSlug(baseName) || `room-${Date.now()}`;
 
@@ -85,7 +94,6 @@ async function getStoreBySlug(storeSlug: string) {
   };
 }
 
-// 顧客端：取得房間列表（含刮卡進度）
 export async function GET(_: Request, context: RouteContext) {
   try {
     const { storeSlug } = await context.params;
@@ -101,7 +109,7 @@ export async function GET(_: Request, context: RouteContext) {
 
     const { data: rooms, error: roomsError } = await supabase
       .from("rooms")
-      .select("id, name, slug, status, cell_count, created_at")
+      .select("id, name, slug, status, cell_count, prize_numbers, created_at")
       .eq("store_id", storeResult.store.id)
       .order("created_at", { ascending: false });
 
@@ -112,11 +120,12 @@ export async function GET(_: Request, context: RouteContext) {
     const roomIds = (rooms ?? []).map((room) => room.id);
 
     const revealedCountMap: Record<string, number> = {};
+    const revealedPrizeCountMap: Record<string, number> = {};
 
     if (roomIds.length > 0) {
       const { data: cells, error: cellsError } = await supabase
         .from("cells")
-        .select("room_id, is_revealed")
+        .select("room_id, is_revealed, revealed_number")
         .in("room_id", roomIds);
 
       if (cellsError) {
@@ -126,31 +135,61 @@ export async function GET(_: Request, context: RouteContext) {
         );
       }
 
-      for (const cell of cells ?? []) {
-        const roomId = String(cell.room_id);
+      for (const room of rooms ?? []) {
+        const roomId = String(room.id);
+        const prizeNumbers = parsePrizeNumbers(room.prize_numbers);
 
-        if (!revealedCountMap[roomId]) {
-          revealedCountMap[roomId] = 0;
-        }
+        revealedCountMap[roomId] = 0;
+        revealedPrizeCountMap[roomId] = 0;
 
-        if (cell.is_revealed) {
-          revealedCountMap[roomId] += 1;
+        for (const cell of cells ?? []) {
+          if (String(cell.room_id) !== roomId) continue;
+
+          if (cell.is_revealed) {
+            revealedCountMap[roomId] += 1;
+
+            if (prizeNumbers.includes(Number(cell.revealed_number))) {
+              revealedPrizeCountMap[roomId] += 1;
+            }
+          }
         }
       }
     }
 
     const safeRooms = (rooms ?? []).map((room) => {
       const cellCount = room.cell_count ?? 0;
-      const revealedCount = revealedCountMap[String(room.id)] ?? 0;
+      const roomId = String(room.id);
+
+      const revealedCount = revealedCountMap[roomId] ?? 0;
       const remainingCount = Math.max(cellCount - revealedCount, 0);
+
       const progressPercent =
         cellCount > 0 ? Math.round((revealedCount / cellCount) * 100) : 0;
+
+      const prizeNumbers = parsePrizeNumbers(room.prize_numbers);
+      const prizeTotalCount = prizeNumbers.length;
+
+      const revealedPrizeCount = revealedPrizeCountMap[roomId] ?? 0;
+      const remainingPrizeCount = Math.max(
+        prizeTotalCount - revealedPrizeCount,
+        0
+      );
+
+      const remainingPrizeRate =
+        remainingCount > 0 && prizeTotalCount > 0
+          ? Math.round((remainingPrizeCount / remainingCount) * 1000) / 10
+          : 0;
 
       return {
         ...room,
         revealed_count: revealedCount,
         remaining_count: remainingCount,
         progress_percent: progressPercent,
+
+        prize_total_count: prizeTotalCount,
+        revealed_prize_count: revealedPrizeCount,
+        remaining_prize_count: remainingPrizeCount,
+        remaining_prize_rate: remainingPrizeRate,
       };
     });
 
@@ -170,7 +209,6 @@ export async function GET(_: Request, context: RouteContext) {
   }
 }
 
-// 商家端：建立房間
 export async function POST(req: Request, context: RouteContext) {
   try {
     const { storeSlug } = await context.params;
@@ -194,22 +232,52 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     const body = await req.json();
+
     const name = String(body?.name || "").trim();
+    const prizeNumbersRaw = String(body?.prize_numbers || "").trim();
 
     const rawCellCount = String(
       body?.cellCount ?? body?.cell_count ?? ""
     ).trim();
+
     const cellCount = parseInt(rawCellCount, 10);
 
-    const allowedCellCounts = [6, 9, 15, 20, 25, 30, 40, 50, 60, 100, 120, 200];
-
     if (!name) {
-      return NextResponse.json({ error: "請輸入房間名稱" }, { status: 400 });
+      return NextResponse.json(
+        { error: "請輸入房間名稱" },
+        { status: 400 }
+      );
     }
 
-    if (!Number.isInteger(cellCount) || !allowedCellCounts.includes(cellCount)) {
-      return NextResponse.json({ error: "格數不正確" }, { status: 400 });
+    if (!Number.isInteger(cellCount) || cellCount < 1 || cellCount > 1000) {
+      return NextResponse.json(
+        { error: "格數必須介於 1~1000" },
+        { status: 400 }
+      );
     }
+
+    const prizeNumbers = parsePrizeNumbers(prizeNumbersRaw);
+
+    if (prizeNumbersRaw && prizeNumbers.length === 0) {
+      return NextResponse.json(
+        { error: "中獎號碼格式不正確，請用逗號分隔，例如：1,5,6" },
+        { status: 400 }
+      );
+    }
+
+    const invalidPrizeNumber = prizeNumbers.some(
+      (number) => number < 1 || number > cellCount
+    );
+
+    if (invalidPrizeNumber) {
+      return NextResponse.json(
+        { error: `中獎號碼必須介於 1~${cellCount}` },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPrizeNumbers =
+      prizeNumbers.length > 0 ? prizeNumbers.join(",") : null;
 
     const slug = await createUniqueRoomSlug(name);
 
@@ -221,8 +289,9 @@ export async function POST(req: Request, context: RouteContext) {
         slug,
         status: "draft",
         cell_count: cellCount,
+        prize_numbers: normalizedPrizeNumbers,
       })
-      .select("id, name, slug, status, cell_count")
+      .select("id, name, slug, status, cell_count, prize_numbers")
       .single();
 
     if (roomError || !room) {
@@ -237,6 +306,7 @@ export async function POST(req: Request, context: RouteContext) {
       cell_index: i + 1,
       is_revealed: false,
       revealed_number: null,
+      is_winner: false,
     }));
 
     const { error: cellError } = await supabase.from("cells").insert(cells);

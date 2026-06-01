@@ -9,13 +9,27 @@ export default function CreateRoomForm({
   storeSlug: string;
 }) {
   const router = useRouter();
+
   const [name, setName] = useState("");
   const [cellCount, setCellCount] = useState("30");
+  const [prizeNumbers, setPrizeNumbers] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    const count = Number(cellCount);
+
+    if (!name.trim()) {
+      setMessage("請輸入房間名稱");
+      return;
+    }
+
+    if (!Number.isInteger(count) || count < 1 || count > 1000) {
+      setMessage("格數必須介於 1 ~ 1000");
+      return;
+    }
 
     try {
       setLoading(true);
@@ -28,7 +42,8 @@ export default function CreateRoomForm({
         },
         body: JSON.stringify({
           name,
-          cellCount: Number(cellCount),
+          cellCount: count,
+          prize_numbers: prizeNumbers.trim(),
         }),
       });
 
@@ -42,6 +57,7 @@ export default function CreateRoomForm({
       setMessage("房間建立成功");
       setName("");
       setCellCount("30");
+      setPrizeNumbers("");
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -63,6 +79,7 @@ export default function CreateRoomForm({
           <label className="mb-1 block text-sm font-medium text-gray-700">
             房間名稱
           </label>
+
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -75,24 +92,33 @@ export default function CreateRoomForm({
           <label className="mb-1 block text-sm font-medium text-gray-700">
             格數
           </label>
-          <select
+
+          <input
+            type="number"
+            min="1"
+            max="1000"
             value={cellCount}
             onChange={(e) => setCellCount(e.target.value)}
+            placeholder="請輸入格數"
             className="w-full rounded-xl border p-3 text-sm text-black outline-none focus:border-black"
-          >
-            <option value="6">6 格</option>
-            <option value="9">9 格</option>
-            <option value="15">15 格</option>
-            <option value="20">20 格</option>
-            <option value="25">25 格</option>
-            <option value="30">30 格</option>
-            <option value="40">40 格</option>
-            <option value="50">50 格</option>
-            <option value="60">60 格</option>
-            <option value="100">100 格</option>
-            <option value="120">120 格</option>
-            <option value="200">200 格</option>
-          </select>
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            中獎號碼，可不填
+          </label>
+
+          <input
+            value={prizeNumbers}
+            onChange={(e) => setPrizeNumbers(e.target.value)}
+            placeholder="例如：1,5,8,30"
+            className="w-full rounded-xl border p-3 text-sm text-black outline-none focus:border-black"
+          />
+
+          <p className="mt-1 text-xs text-gray-500">
+            多個號碼請用逗號分隔。沒填就不顯示中獎提示。
+          </p>
         </div>
       </div>
 

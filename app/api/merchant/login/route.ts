@@ -72,8 +72,6 @@ export async function POST(req: Request) {
         );
       }
 
-      const firstStore = stores[0];
-
       const { data: staffRoles } = await supabase
         .from("store_staff")
         .select(
@@ -81,6 +79,13 @@ export async function POST(req: Request) {
         )
         .eq("username", merchant.username)
         .eq("is_active", true);
+
+      const staffStoreIds = new Set(
+        (staffRoles || []).map((role) => String(role.store_id))
+      );
+
+      const firstStore =
+        stores.find((store) => staffStoreIds.has(String(store.id))) || stores[0];
 
       const staffRole = staffRoles?.find(
         (role) => String(role.store_id) === String(firstStore.id)
@@ -140,13 +145,15 @@ export async function POST(req: Request) {
       return res;
     }
 
-    const { data: staff, error: staffError } = await supabase
+    const { data: staffList, error: staffError } = await supabase
       .from("store_staff")
       .select(
         "id, store_id, username, password_hash, can_manage_special_rules, can_manage_special_mode, is_active"
       )
       .eq("username", username)
-      .maybeSingle();
+      .eq("is_active", true);
+
+    const staff = staffList?.find((s) => s.password_hash === password);
 
     if (staffError) {
       return NextResponse.json(

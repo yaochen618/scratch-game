@@ -9,9 +9,12 @@ type CellResult = {
   draw_order: number;
   revealed_at: string | null;
   is_revealed?: boolean;
+  is_winner?: boolean | null;
 };
 
-type ScratchMode = "none" | "left" | "right" | "all";
+const CANVAS_SIZE = 300;
+const BRUSH_RADIUS = 28;
+const REVEAL_PERCENT = 0.45;
 
 export default function ScratchPage() {
   const params = useParams();
@@ -21,17 +24,15 @@ export default function ScratchPage() {
   const roomSlug = params.roomSlug as string;
   const cellId = params.cellId as string;
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isScratchingRef = useRef(false);
+  const hasTriggeredRevealRef = useRef(false);
+
   const [result, setResult] = useState<CellResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
-
-  const [scratchMode, setScratchMode] = useState<ScratchMode>("none");
-  const [showFinishButton, setShowFinishButton] = useState(false);
-  const [showMeta, setShowMeta] = useState(false);
-
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const hasTriggeredRevealRef = useRef(false);
+  const [showMeta, setShowMeta] = useState(false);
 
   const formattedNumber = useMemo(() => {
     if (!result) return "00";
@@ -47,9 +48,7 @@ export default function ScratchPage() {
           `/api/stores/${storeSlug}/rooms/${roomSlug}/scratch/preview`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cellId }),
           }
         );
@@ -60,13 +59,11 @@ export default function ScratchPage() {
         try {
           data = JSON.parse(text);
         } catch {
-          console.error("preview API 非 JSON 回傳：", text);
           if (!cancelled) setErrorMsg("伺服器回傳格式錯誤");
           return;
         }
 
         if (!res.ok) {
-          console.error("preview API 錯誤：", data);
           if (!cancelled) setErrorMsg(data.error || "失敗");
           return;
         }
@@ -82,19 +79,17 @@ export default function ScratchPage() {
           draw_order: Number(data.cell.draw_order),
           revealed_at: data.cell.revealed_at ?? null,
           is_revealed: Boolean(data.cell.is_revealed),
+          is_winner: Boolean(data.cell.is_winner),
         };
 
         if (cancelled) return;
 
-        // 畫面直接固定用 preview 的值
         setResult(previewResult);
         setReady(true);
 
         if (previewResult.is_revealed) {
-          setScratchMode("all");
-          setShowFinishButton(false);
-          setShowMeta(true);
           hasTriggeredRevealRef.current = true;
+          setShowMeta(true);
         }
       } catch (error) {
         console.error("scratch page preview error:", error);
@@ -109,6 +104,54 @@ export default function ScratchPage() {
     };
   }, [storeSlug, roomSlug, cellId]);
 
+  useEffect(() => {
+    if (!ready) return;
+
+    if (showMeta) {
+      clearMask();
+    } else {
+      initMask();
+    }
+  }, [ready, showMeta]);
+
+  const initMask = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.beginPath();
+    ctx.arc(
+      canvas.width / 2,
+      canvas.height / 2,
+      canvas.width / 2,
+      0,
+      Math.PI * 2
+    );
+    ctx.fillStyle = "#9CA3AF";
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("刮開", canvas.width / 2, canvas.height / 2);
+  };
+
+  const clearMask = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
   const revealFinal = async () => {
     if (hasTriggeredRevealRef.current) return true;
 
@@ -121,9 +164,7 @@ export default function ScratchPage() {
         `/api/stores/${storeSlug}/rooms/${roomSlug}/scratch`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cellId }),
         }
       );
@@ -134,14 +175,12 @@ export default function ScratchPage() {
       try {
         data = JSON.parse(text);
       } catch {
-        console.error("scratch API 非 JSON 回傳：", text);
         setErrorMsg("伺服器回傳格式錯誤");
         hasTriggeredRevealRef.current = false;
         return false;
       }
 
       if (!res.ok) {
-        console.error("scratch API 錯誤：", data);
         setErrorMsg(data.error || "失敗");
         hasTriggeredRevealRef.current = false;
         return false;
@@ -153,7 +192,15 @@ export default function ScratchPage() {
         return false;
       }
 
-      // 注意：這裡不要 setResult，避免數字跳動
+      setResult({
+        id: data.cell.id,
+        revealed_number: Number(data.cell.revealed_number),
+        draw_order: Number(data.cell.draw_order),
+        revealed_at: data.cell.revealed_at ?? null,
+        is_revealed: Boolean(data.cell.is_revealed),
+        is_winner: Boolean(data.cell.is_winner),
+      });
+
       return true;
     } catch (error) {
       console.error("scratch page reveal error:", error);
@@ -165,153 +212,181 @@ export default function ScratchPage() {
     }
   };
 
-  const handleScratchLeft = async () => {
-    if (!ready || submitting || !result) return;
+  const getScratchedPercent = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return 0;
 
-    setShowMeta(false);
-    setScratchMode("left");
-    setShowFinishButton(true);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
 
-    const ok = await revealFinal();
-    if (!ok) {
-      setScratchMode("none");
-      setShowFinishButton(false);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = canvas.width / 2;
+
+    let totalCirclePixels = 0;
+    let transparentPixels = 0;
+
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+
+        if (dx * dx + dy * dy <= radius * radius) {
+          totalCirclePixels++;
+
+          const alphaIndex = (y * canvas.width + x) * 4 + 3;
+
+          if (data[alphaIndex] === 0) {
+            transparentPixels++;
+          }
+        }
+      }
+    }
+
+    return transparentPixels / totalCirclePixels;
+  };
+
+  const scratchAt = async (clientX: number, clientY: number) => {
+    if (!ready || submitting || showMeta || !result) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x, y, BRUSH_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+
+    const percent = getScratchedPercent();
+
+    if (percent >= REVEAL_PERCENT && !hasTriggeredRevealRef.current) {
+      clearMask();
+
+      const ok = await revealFinal();
+
+      if (ok) {
+        setShowMeta(true);
+      } else {
+        initMask();
+      }
     }
   };
 
-  const handleScratchRight = async () => {
-    if (!ready || submitting || !result) return;
-
-    setShowMeta(false);
-    setScratchMode("right");
-    setShowFinishButton(true);
-
-    const ok = await revealFinal();
-    if (!ok) {
-      setScratchMode("none");
-      setShowFinishButton(false);
-    }
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isScratchingRef.current = true;
+    scratchAt(e.clientX, e.clientY);
   };
 
-  const handleScratchAllDirect = async () => {
-    if (!ready || submitting || !result) return;
-
-    setShowFinishButton(false);
-    setScratchMode("all");
-
-    const ok = await revealFinal();
-    if (!ok) {
-      setScratchMode("none");
-      return;
-    }
-
-    setShowMeta(true);
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isScratchingRef.current) return;
+    scratchAt(e.clientX, e.clientY);
   };
 
-  const handleFinishScratch = () => {
-    setShowFinishButton(false);
-    setScratchMode("all");
+  const handleMouseUp = () => {
+    isScratchingRef.current = false;
+  };
 
-    window.setTimeout(() => {
-      setShowMeta(true);
-    }, 0);
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    isScratchingRef.current = true;
+
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    scratchAt(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isScratchingRef.current) return;
+
+    e.preventDefault();
+
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    scratchAt(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = () => {
+    isScratchingRef.current = false;
   };
 
   return (
     <main className="min-h-screen bg-blue-100 px-4 py-6">
       <div className="mx-auto max-w-md">
-        <div className="rounded-3xl bg-white p-5 text-center shadow-lg">
+        <div
+          className={`rounded-3xl p-5 text-center shadow-lg ${
+            result?.is_winner && showMeta
+              ? "bg-yellow-100"
+              : "bg-white"
+          }`}
+        >
           <h1 className="mb-4 text-xl font-bold text-black">
-            {showMeta ? "結果" : "選擇刮開方式"}
+            {showMeta ? "結果" : "手指刮開"}
           </h1>
 
+          {result?.is_winner && showMeta && (
+            <div className="mb-4 rounded-2xl bg-red-500 px-4 py-3 text-white shadow">
+              <p className="text-2xl font-extrabold">🎉 恭喜中獎 🎉</p>
+            </div>
+          )}
+
           <div className="mb-6 flex justify-center">
-            <div className="relative h-44 w-44 overflow-hidden rounded-full border bg-gray-100 shadow-inner">
+            <div
+              className={`relative h-72 w-72 overflow-hidden rounded-full border shadow-inner ${
+                result?.is_winner && showMeta
+                  ? "border-red-500 bg-yellow-200"
+                  : "bg-gray-100"
+              }`}
+            >
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-5xl font-bold tracking-wide text-black">
+                <span
+                  className={`text-8xl font-bold tracking-wide ${
+                    result?.is_winner && showMeta
+                      ? "text-red-600"
+                      : "text-black"
+                  }`}
+                >
                   {formattedNumber}
                 </span>
               </div>
 
-              <div
-                className={`absolute left-0 top-0 h-full bg-gray-400 transition-all duration-700 ease-in-out ${
-                  scratchMode === "none"
-                    ? "w-1/2"
-                    : scratchMode === "left"
-                    ? "w-0"
-                    : scratchMode === "right"
-                    ? "w-1/2"
-                    : "w-0"
-                }`}
+              <canvas
+                ref={canvasRef}
+                width={CANVAS_SIZE}
+                height={CANVAS_SIZE}
+                className="absolute inset-0 h-full w-full touch-none rounded-full"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
               />
-
-              <div
-                className={`absolute right-0 top-0 h-full bg-gray-400 transition-all duration-700 ease-in-out ${
-                  scratchMode === "none"
-                    ? "w-1/2"
-                    : scratchMode === "left"
-                    ? "w-1/2"
-                    : scratchMode === "right"
-                    ? "w-0"
-                    : "w-0"
-                }`}
-              />
-
-              {scratchMode === "none" && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="text-base font-semibold text-white/90">
-                    刮開
-                  </span>
-                </div>
-              )}
             </div>
           </div>
-
-          {!showMeta && (
-            <div className="space-y-3">
-              {!showFinishButton ? (
-                <>
-                  <button
-                    onClick={handleScratchLeft}
-                    className="w-full rounded-xl bg-black py-3 font-semibold text-white"
-                  >
-                    刮左半
-                  </button>
-
-                  <button
-                    onClick={handleScratchRight}
-                    className="w-full rounded-xl bg-black py-3 font-semibold text-white"
-                  >
-                    刮右半
-                  </button>
-
-                  <button
-                    onClick={handleScratchAllDirect}
-                    className="w-full rounded-xl bg-green-600 py-3 font-semibold text-white"
-                  >
-                    直接刮開
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-black">刮開全部查看完整數字</p>
-
-                  <button
-                    onClick={handleFinishScratch}
-                    className="w-full rounded-xl bg-black py-3 font-semibold text-white"
-                  >
-                    刮開全部
-                  </button>
-                </>
-              )}
-            </div>
-          )}
 
           {result && showMeta && (
             <>
               <div className="mb-4 rounded-2xl bg-gray-200 px-4 py-3 text-left">
                 <p className="text-sm text-gray-600">店家</p>
-                <p className="text-base font-semibold text-black">{storeSlug}</p>
+                <p className="text-base font-semibold text-black">
+                  {storeSlug}
+                </p>
               </div>
 
               <p className="text-lg font-semibold text-black">
@@ -319,7 +394,9 @@ export default function ScratchPage() {
               </p>
 
               <button
-                onClick={() => router.push(`/stores/${storeSlug}/rooms/${roomSlug}`)}
+                onClick={() =>
+                  router.push(`/stores/${storeSlug}/rooms/${roomSlug}`)
+                }
                 className="mt-6 w-full rounded-xl bg-black py-3 font-semibold text-white"
               >
                 回到刮板
