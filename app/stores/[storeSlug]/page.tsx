@@ -214,16 +214,13 @@ export default function StoreDetailPage() {
                           </div>
 
                           <div className="rounded-xl bg-white px-3 py-2">
-                            <div className="text-red-600">剩餘中獎機率</div>
+                            <div className="text-red-600">目前中獎機率</div>
                             <div className="font-bold text-red-700">
                               {prizeRate}%
                             </div>
                           </div>
                         </div>
 
-                        <p className="mt-2 text-xs text-red-500">
-                          依目前剩餘獎數 / 剩餘格數計算
-                        </p>
                       </div>
                     )}
                   </div>
