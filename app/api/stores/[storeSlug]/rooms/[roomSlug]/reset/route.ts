@@ -32,6 +32,7 @@ export async function POST(_: Request, context: RouteContext) {
       .update({
         is_revealed: false,
         revealed_number: null,
+        draw_order: null,
         revealed_at: null,
       })
       .eq("room_id", access.room.id);
